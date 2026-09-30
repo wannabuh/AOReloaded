@@ -21,6 +21,7 @@
 #include "hooks/camera_hook.h"
 #include "hooks/numpad_fix.h"
 #include "hooks/timer_bar_drag.h"
+#include "hooks/alt_select.h"
 
 #include <windows.h>
 
@@ -72,6 +73,12 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     // Ensure the AOReloaded tab exists in the options panel XML.
     // Must happen before the game parses Root.xml (during world load).
     aor::PatchOptionsXml();
+
+    // Alt+click multi-select. GUI.dll and Interfaces.dll are static imports
+    // of the exe, so they're loaded already.
+    if (!aor::InitAltSelect()) {
+        aor::Log("[init] alt select failed — alt+click won't select items");
+    }
 
     // Wait for game world. 
     aor::Log("[init] waiting for game world...");
