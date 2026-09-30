@@ -12,10 +12,15 @@ The stock client appears to support this already, gated by the `UseNewMouseFunc`
 
 | Where | Gesture | Call | Effect |
 |---|---|---|---|
-| Inventory / backpack item, trade window open | Ctrl + left click | `N3Msg_TradeAddItem(trade+0x1d0, item)` | offer item |
+| Inventory / backpack item, trade window open | Ctrl + right click (see note) | `N3Msg_TradeAddItem(trade+0x1d0, item)` | offer item |
 | Own offer list in the trade window | left click | `N3Msg_TradeRemoveItem(trade+0x1d0, item)` | take it back |
 | Shop / other party item list | left click | `N3Msg_TradeAddItem(trade+0x1c8, item)` | select to buy |
 | "Buying" list | left click | `N3Msg_TradeRemoveItem(trade+0x1c8, item)` | unselect |
+
+**Button note:** a forum post confirms "Ctrl + right click on an item in the inventory sells it
+when a shop window is open". The code checks button `1`, which AOReloaded's input handler
+treats as LMB, so `UseNewMouseFunc` presumably swaps which physical button arrives as `1`.
+The "left click" entries below may therefore be right clicks in practice.
 
 All calls go through `N3InterfaceModule_t::GetInstance()` (Interfaces.dll), the same path as
 dropping a dragged item, so the server sees identical requests.
@@ -74,9 +79,24 @@ Awesomium's Shift/Ctrl/Alt (1/2/4), which confirms the meaning.
 | `0x101a75f0` | `N3InterfaceModule_t::N3Msg_UseItem(Identity_t const&, bool)` |
 | `0x101a83b4` | `Variant::operator Identity_t()` (item identity lives in a Variant at `item+0x20`) |
 
+## Backpacks (implemented in `src/hooks/bag_move.cpp`)
+
+- Backpack → inventory already exists: the non-trade branch of `0x100ca1e7` calls
+  `MoveItemToInventory(item)` for any view that isn't the main inventory.
+- Inventory → backpack does not. The only `N3Msg_ContainerAddItem` call in GUI.dll
+  (`0x100cc0bc`) is the inventory view's drop handler, which passes the target view's
+  container identity from `+0x140`. `bag_move.cpp` hooks `0x100ca1e7` and, for a Ctrl+click
+  on a main-inventory item with no trade open, calls `N3Msg_ContainerAddItem(lastOpened, item)`.
+  Open containers come from hooking `InventoryGUIModule_c::SlotContainerOpened/Closed`
+  (both exported; `SlotContainerOpened` starts with `mov eax, imm32`, which the hook engine
+  already supports).
+- "Main inventory" is the stock UseItem condition: `view+0x14c != 0 && view+0x140 (type) != 0xDEAD`.
+
 ## Open questions (need an in-game test)
 
 - Does Ctrl+click from the inventory work for **shop terminals**, or only player trades?
   Both go through `InventoryGUIModule_c::GetTradeView()` / `SlotStartTrade(TradeType_e, …)`.
 - What `(byte at +0x150) & 0xC0` and `check_1003ca2f` reject.
-- Whether button 1 is really the left button here (AOReloaded's input handler uses 1 = LMB).
+- Whether button 1 is really the left button here (the forum says right click).
+- Which identity types `SlotContainerOpened` reports for backpacks vs. corpses/loot
+  (`[bagmove]` log lines print them); bag_move currently accepts any open container.

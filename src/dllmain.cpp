@@ -21,6 +21,7 @@
 #include "hooks/camera_hook.h"
 #include "hooks/numpad_fix.h"
 #include "hooks/timer_bar_drag.h"
+#include "hooks/bag_move.h"
 
 #include <windows.h>
 
@@ -72,6 +73,13 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     // Ensure the AOReloaded tab exists in the options panel XML.
     // Must happen before the game parses Root.xml (during world load).
     aor::PatchOptionsXml();
+
+    // Ctrl+click inventory -> backpack. GUI.dll and Interfaces.dll are static
+    // imports of the exe, so they're loaded already; installing before world
+    // load means backpacks the client re-opens on login are tracked too.
+    if (!aor::InitBagMove()) {
+        aor::Log("[init] bag move failed — ctrl+click won't move items into backpacks");
+    }
 
     // Wait for game world. 
     aor::Log("[init] waiting for game world...");
