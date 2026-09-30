@@ -23,6 +23,7 @@
 #include "hooks/numpad_fix.h"
 #include "hooks/timer_bar_drag.h"
 #include "hooks/bag_move.h"
+#include "hooks/alt_select.h"
 
 #include <windows.h>
 
@@ -86,6 +87,12 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     // load means backpacks the client re-opens on login are tracked too.
     if (!aor::InitBagMove()) {
         aor::Log("[init] bag move failed — ctrl+click won't move items into backpacks");
+    }
+
+    // Alt+click multi-select. GUI.dll and Interfaces.dll are static imports
+    // of the exe, so they're loaded already.
+    if (!aor::InitAltSelect()) {
+        aor::Log("[init] alt select failed — alt+click won't select items");
     }
 
     // Wait for game world. 

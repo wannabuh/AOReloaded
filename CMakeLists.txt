@@ -44,6 +44,7 @@ add_library(AOReloaded SHARED
     src/hooks/numpad_fix.cpp
     src/hooks/timer_bar_drag.cpp
     src/hooks/bag_move.cpp
+    src/hooks/alt_select.cpp
 )
 
 set_target_properties(AOReloaded PROPERTIES
