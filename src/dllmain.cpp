@@ -16,6 +16,7 @@
 #include "core/logging.h"
 #include "core/laa_patch.h"
 #include "core/settings.h"
+#include "core/fps_cap.h"
 #include "ao/game_api.h"
 #include "hooks/input_handler.h"
 #include "hooks/camera_hook.h"
@@ -72,6 +73,12 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     // Ensure the AOReloaded tab exists in the options panel XML.
     // Must happen before the game parses Root.xml (during world load).
     aor::PatchOptionsXml();
+
+    // Apply the frame rate cap now so it also covers the login screens.
+    // The slider callback only fires once SettingsInstallHook() is in.
+    if (!aor::InitFpsCap()) {
+        aor::Log("[init] fps cap failed — client keeps its own limit");
+    }
 
     // Wait for game world. 
     aor::Log("[init] waiting for game world...");
