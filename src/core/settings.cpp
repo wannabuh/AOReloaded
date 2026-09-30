@@ -54,6 +54,7 @@ static SettingDef g_settings[] = {
     { "AOR_TBarH",     SettingType::Int,  10,      10,      8,  128 },
     { "AOR_TBarPrev",  SettingType::Bool,  0,       0,      0,    1 },
     { "AOR_FpsCap",    SettingType::Int, 100,     100,     30,  500 },
+    { "AOR_BagMove",   SettingType::Bool,  1,       1,      0,    1 },
 };
 
 static constexpr int kSettingCount = sizeof(g_settings) / sizeof(g_settings[0]);
@@ -366,6 +367,8 @@ static const char kAorXmlBlock[] =
     "        <TextView value=\"Input\" layout_borders=\"Rect(0,10,0,3)\" />\n"
     "        <OptionCheckBox label=\"Numpad keys type in chat fix\""
     " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_NumpadFix\"/>\n"
+    "        <OptionCheckBox label=\"Ctrl+click moves inventory items into the last opened backpack\""
+    " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_BagMove\"/>\n"
     "\n"
     "        <TextView value=\"Performance\" layout_borders=\"Rect(0,10,0,3)\" />\n"
     "        <OptionSlider label=\"Maximum frame rate (default: 100):\""

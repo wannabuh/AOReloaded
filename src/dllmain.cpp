@@ -22,6 +22,7 @@
 #include "hooks/camera_hook.h"
 #include "hooks/numpad_fix.h"
 #include "hooks/timer_bar_drag.h"
+#include "hooks/bag_move.h"
 
 #include <windows.h>
 
@@ -78,6 +79,13 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     // The slider callback only fires once SettingsInstallHook() is in.
     if (!aor::InitFpsCap()) {
         aor::Log("[init] fps cap failed — client keeps its own limit");
+    }
+
+    // Ctrl+click inventory -> backpack. GUI.dll and Interfaces.dll are static
+    // imports of the exe, so they're loaded already; installing before world
+    // load means backpacks the client re-opens on login are tracked too.
+    if (!aor::InitBagMove()) {
+        aor::Log("[init] bag move failed — ctrl+click won't move items into backpacks");
     }
 
     // Wait for game world. 
