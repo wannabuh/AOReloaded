@@ -5,6 +5,7 @@
 
 #include "hooks/alt_select.h"
 #include "hooks/hook_engine.h"
+#include "hooks/inventory_pins.h"
 #include "ao/game_api.h"
 #include "ao/types.h"
 #include "core/logging.h"
@@ -76,8 +77,10 @@ constexpr uint32_t kItemVariantOffset = 0x20;
 // layout {first, last, end} — GetItemCount() is (+0x1bc - +0x1b8) / 4.
 constexpr uint32_t kListItemsOffset = 0x1b8;
 
-// Qualifier bits from WindowController_c::GetQualifiers: LAlt 0x10, RAlt 0x20.
-constexpr unsigned kQualifierAlt = 0x30;
+// Qualifier bits from WindowController_c::GetQualifiers: LCtrl 0x4, RCtrl 0x8,
+// LAlt 0x10, RAlt 0x20.
+constexpr unsigned kQualifierCtrl = 0xC;
+constexpr unsigned kQualifierAlt  = 0x30;
 
 // ── Selection ──────────────────────────────────────────────────────────
 
@@ -151,7 +154,13 @@ static void ToggleItem(void* list, void* item) {
 
 static void __fastcall ListMouseUpDetour(
         void* list, void* /*edx*/, void* unknown, void* item, int button, void* drag) {
-    if (!drag && IsAltSelectEnabled() && (g_getQualifiers(list) & kQualifierAlt)) {
+    const unsigned qualifiers = drag ? 0 : g_getQualifiers(list);
+    // Ctrl+Alt+click pins an inventory item (inventory_pins.cpp).
+    if (item && (qualifiers & kQualifierAlt) && (qualifiers & kQualifierCtrl) &&
+        TogglePinFromClick(list, item)) {
+        return;
+    }
+    if ((qualifiers & kQualifierAlt) && IsAltSelectEnabled()) {
         if (item) {
             ToggleItem(list, item);
         } else if (list == g_selList) {

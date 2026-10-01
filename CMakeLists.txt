@@ -45,6 +45,7 @@ add_library(AOReloaded SHARED
     src/hooks/timer_bar_drag.cpp
     src/hooks/bag_move.cpp
     src/hooks/alt_select.cpp
+    src/hooks/inventory_pins.cpp
 )
 
 set_target_properties(AOReloaded PROPERTIES

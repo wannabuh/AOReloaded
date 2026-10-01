@@ -103,6 +103,20 @@ Awesomium's Shift/Ctrl/Alt (1/2/4), which confirms the meaning.
   the call a drag back to the inventory ends in. The Alt+click selection hook on
   `MoveItemToInventory` then moves the rest of the selection too.
 
+## List sorting and pins (implemented in `src/hooks/inventory_pins.cpp`)
+
+- `MultiListView_c` keeps its items in `std::vector<MultiListViewItem_c*>` at `+0x1b8`; in list
+  mode (`+0x158 == 1`, `GetLayoutMode`) `UpdateItemPositions` lays rows out in vector order.
+- `Sort(bool force)` (`0x10136bb6`) stable-sorts that vector. With `GetActiveSortOrder() == 0`
+  an item goes first when `a->Compare(b, col) < 0`; otherwise (through the list's own
+  `+0x128` signal → `SlotCompareItems`) when it is `> 0`.
+- `AddItem` on a sorted list (`+0x16c` set) binary-searches the insert position with the same
+  comparisons, so new items don't go through `Sort`.
+- `Compare` is vtable slot 1. `InventoryListViewItem_c` (vtable `0x101b0128`, slot 1 =
+  `0x1003cc19`): column 0 = grid position, 1 = name (`String` at `+0x4c`), 2..16 = ints at
+  `+0x70 + col*4`. Pins replace that slot; Ctrl+Alt+click arrives through alt_select's
+  list mouse-up hook.
+
 ## Open questions (need an in-game test)
 
 - Does Ctrl+click from the inventory work for **shop terminals**, or only player trades?

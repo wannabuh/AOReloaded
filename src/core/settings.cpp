@@ -56,6 +56,7 @@ static SettingDef g_settings[] = {
     { "AOR_FpsCap",    SettingType::Int, 100,     100,     30,  500 },
     { "AOR_BagMove",   SettingType::Bool,  1,       1,      0,    1 },
     { "AOR_AltSelect", SettingType::Bool,  1,       1,      0,    1 },
+    { "AOR_InvPins",   SettingType::Bool,  1,       1,      0,    1 },
 };
 
 static constexpr int kSettingCount = sizeof(g_settings) / sizeof(g_settings[0]);
@@ -372,6 +373,8 @@ static const char kAorXmlBlock[] =
     " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_BagMove\"/>\n"
     "        <OptionCheckBox label=\"Alt+click selects several items; moving one moves them all\""
     " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_AltSelect\"/>\n"
+    "        <OptionCheckBox label=\"Ctrl+Alt+click pins an item to the top of the inventory list view\""
+    " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_InvPins\"/>\n"
     "\n"
     "        <TextView value=\"Performance\" layout_borders=\"Rect(0,10,0,3)\" />\n"
     "        <OptionSlider label=\"Maximum frame rate (default: 100):\""

@@ -24,6 +24,7 @@
 #include "hooks/timer_bar_drag.h"
 #include "hooks/bag_move.h"
 #include "hooks/alt_select.h"
+#include "hooks/inventory_pins.h"
 
 #include <windows.h>
 
@@ -93,6 +94,11 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     // of the exe, so they're loaded already.
     if (!aor::InitAltSelect()) {
         aor::Log("[init] alt select failed — alt+click won't select items");
+    }
+
+    // Pinned inventory items (Ctrl+Alt+click, forwarded by alt select).
+    if (!aor::InitInventoryPins()) {
+        aor::Log("[init] inventory pins failed — ctrl+alt+click won't pin items");
     }
 
     // Wait for game world. 
