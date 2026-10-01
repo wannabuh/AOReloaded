@@ -82,11 +82,11 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
         aor::Log("[init] fps cap failed — client keeps its own limit");
     }
 
-    // Ctrl+click inventory -> backpack. GUI.dll and Interfaces.dll are static
+    // Ctrl+click inventory <-> backpack. GUI.dll and Interfaces.dll are static
     // imports of the exe, so they're loaded already; installing before world
     // load means backpacks the client re-opens on login are tracked too.
     if (!aor::InitBagMove()) {
-        aor::Log("[init] bag move failed — ctrl+click won't move items into backpacks");
+        aor::Log("[init] bag move failed — ctrl+click won't move items to/from backpacks");
     }
 
     // Alt+click multi-select. GUI.dll and Interfaces.dll are static imports
