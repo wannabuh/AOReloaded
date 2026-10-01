@@ -366,7 +366,7 @@ static const char kAorXmlBlock[] =
     "        <TextView value=\"Input\" layout_borders=\"Rect(0,10,0,3)\" />\n"
     "        <OptionCheckBox label=\"Numpad keys type in chat fix\""
     " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_NumpadFix\"/>\n"
-    "        <OptionCheckBox label=\"Ctrl+click moves inventory items into the last opened backpack\""
+    "        <OptionCheckBox label=\"Ctrl+click moves items between the inventory and the last opened backpack\""
     " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_BagMove\"/>\n"
     "\n"
     "        <TextView value=\"Debug\" layout_borders=\"Rect(0,10,0,3)\" />\n"

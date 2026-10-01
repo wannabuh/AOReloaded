@@ -98,6 +98,11 @@ Awesomium's Shift/Ctrl/Alt (1/2/4), which confirms the meaning.
   push and crashing (ILLEGAL_INSTRUCTION in the trampoline) whenever a container closed or
   the player zoned. It now decodes the 5th instruction and copies all of it.
 
+- Backpack → inventory: the stock slot *uses* a clicked backpack item (the flag is set), so
+  Ctrl+click in a view whose `+0x140` is an open container calls `MoveItemToInventory(item)`,
+  the call a drag back to the inventory ends in. The Alt+click selection hook on
+  `MoveItemToInventory` then moves the rest of the selection too.
+
 ## Open questions (need an in-game test)
 
 - Does Ctrl+click from the inventory work for **shop terminals**, or only player trades?

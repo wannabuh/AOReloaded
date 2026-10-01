@@ -1,4 +1,4 @@
-// bag_move.cpp — Ctrl+click inventory -> backpack.
+// bag_move.cpp — Ctrl+click between the inventory and backpacks.
 //
 // See bag_move.h for the design overview and docs/inventory_trade_clicks.md
 // for how the stock click handling was worked out.
@@ -52,6 +52,7 @@ using FnGetQualifiers   = unsigned(__thiscall*)(const void* view);  // View::Get
 using FnN3GetInstance   = void*(__cdecl*)();                  // N3InterfaceModule_t::GetInstance
 using FnContainerAdd    = void(__thiscall*)(const void* n3, const AOIdentity* container,
                                             const AOIdentity* item);
+using FnMoveToInventory = bool(__thiscall*)(const void* n3, const AOIdentity* item);
 // Variant::operator Identity_t() const — returns by value through a hidden pointer.
 using FnVariantIdentity = AOIdentity*(__thiscall*)(const void* variant, AOIdentity* ret);
 
@@ -60,6 +61,7 @@ static FnGetTradeView    g_getTradeView    = nullptr;
 static FnGetQualifiers   g_getQualifiers   = nullptr;
 static FnN3GetInstance   g_n3GetInstance   = nullptr;
 static FnContainerAdd    g_containerAdd    = nullptr;
+static FnMoveToInventory g_moveToInventory = nullptr;
 static FnVariantIdentity g_variantIdentity = nullptr;
 
 // ── Layouts (GUI.dll, see docs/inventory_trade_clicks.md) ──────────────
@@ -152,24 +154,36 @@ static bool IsMainInventoryView(const void* view) {
            !IsOpenContainer(*container);
 }
 
-// Returns true if the click was handled here.
-static bool TryMoveToBackpack(void* view, void* item) {
+// Ctrl+click with no trade open: main inventory -> last opened backpack,
+// backpack -> main inventory. Returns true if the click was handled here.
+// Both calls go through the exported functions, so alt_select's hooks on
+// them repeat the move for the rest of an Alt+click selection.
+static bool TryCtrlClickMove(void* view, void* item) {
     if (!item || g_openContainers.empty()) return false;
     if (static_cast<const uint8_t*>(item)[kItemIgnoreOffset]) return false;
     if (!(g_getQualifiers(view) & kQualifierCtrl)) return false;
     if (IsTradeOpen()) return false;              // stock: Ctrl+click sells / trades
-    if (!IsMainInventoryView(view)) return false; // stock: moves out of the backpack
     if (!IsBagMoveEnabled()) return false;
+
+    auto* viewContainer = reinterpret_cast<const AOIdentity*>(
+        static_cast<const uint8_t*>(view) + kViewContainerOffset);
+    const bool fromBackpack = IsOpenContainer(*viewContainer);
+    if (!fromBackpack && !IsMainInventoryView(view)) return false;
+
+    void* n3 = g_n3GetInstance();
+    if (!n3) return false;
 
     AOIdentity itemId = {};
     g_variantIdentity(static_cast<const uint8_t*>(item) + kItemVariantOffset, &itemId);
 
-    const AOIdentity target = g_openContainers.back();
-    void* n3 = g_n3GetInstance();
-    if (!n3) return false;
+    if (fromBackpack) {
+        Log("[bagmove] item %08X:%08X (backpack %08X:%08X) -> inventory",
+            itemId.type, itemId.instance, viewContainer->type, viewContainer->instance);
+        g_moveToInventory(n3, &itemId);
+        return true;
+    }
 
-    auto* viewContainer = reinterpret_cast<const AOIdentity*>(
-        static_cast<const uint8_t*>(view) + kViewContainerOffset);
+    const AOIdentity target = g_openContainers.back();
     Log("[bagmove] item %08X:%08X (view %08X:%08X) -> container %08X:%08X",
         itemId.type, itemId.instance, viewContainer->type, viewContainer->instance,
         target.type, target.instance);
@@ -179,7 +193,7 @@ static bool TryMoveToBackpack(void* view, void* item) {
 
 static void __fastcall ItemActivatedDetour(
         void* view, void* /*edx*/, void* unknown, void* item) {
-    if (TryMoveToBackpack(view, item)) return;
+    if (TryCtrlClickMove(view, item)) return;
     g_origItemActivated(view, unknown, item);
 }
 
@@ -201,6 +215,8 @@ bool InitBagMove() {
     ok &= Resolve(g_n3GetInstance,   "Interfaces.dll", "?GetInstance@N3InterfaceModule_t@@SAPAV1@XZ");
     ok &= Resolve(g_containerAdd,    "Interfaces.dll",
                   "?N3Msg_ContainerAddItem@N3InterfaceModule_t@@QBEXABVIdentity_t@@0@Z");
+    ok &= Resolve(g_moveToInventory, "Interfaces.dll",
+                  "?MoveItemToInventory@N3InterfaceModule_t@@QBE_NABVIdentity_t@@@Z");
     ok &= Resolve(g_variantIdentity, "Utils.dll", "??BVariant@@QBE?AVIdentity_t@@XZ");
 
     void* opened = nullptr;
@@ -235,7 +251,7 @@ bool InitBagMove() {
     }
     g_origItemActivated = reinterpret_cast<FnItemActivated>(tramp);
 
-    Log("[bagmove] ctrl+click inventory -> backpack installed");
+    Log("[bagmove] ctrl+click inventory <-> backpack installed");
     return true;
 }
 
