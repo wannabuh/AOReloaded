@@ -121,6 +121,11 @@ Awesomium's Shift/Ctrl/Alt (1/2/4), which confirms the meaning.
   ignoring Alt: it picks up 1, mouse-x movement changes the amount (`+0x308`), and mouse-up
   emits the drag with that `split_count`. Ctrl+Alt is the pin gesture, so the pin hook sends
   that press straight to `MultiListView_c::MouseDown` instead.
+- Row text: list rows keep their own copies of the columns (name at row `+0x12c`), filled by
+  the row update `0x1003e2ac` from `InventoryListViewItem_c::GetName()` (`0x1003ca3d`, a copy
+  of item `+0x4c`; its only callers). `InvalidateItem` → item vtable slot 4 (`0x1003d165`) →
+  row update. The pin marker prefixes `GetName`'s result, so the item's own name (sorting,
+  pin key) is unchanged.
 
 ## Open questions (need an in-game test)
 

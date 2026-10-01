@@ -11,7 +11,8 @@
 // InventoryListViewItem_c with a wrapper that orders pinned items first and
 // leaves every other comparison to the original. Grid mode is untouched.
 // Ctrl+press on a stack normally starts the stock split; with Alt held too
-// that is skipped, so stacks can be pinned.
+// that is skipped, so stacks can be pinned. Pinned rows show "* " before the
+// name (the row's copy of it; the item's own name, used for sorting, is kept).
 //
 // Pins are per character, keyed by the item's identity (its slot) plus its
 // name, and saved in AOReloadedPins.ini next to the exe. An item that moves

@@ -58,6 +58,22 @@ using FnMouseDown = void(__thiscall*)(void* list, const void* point, int button,
 static FnMouseDown g_origSplitMouseDown = nullptr;
 static FnMouseDown g_baseMouseDown      = nullptr;  // MultiListView_c::MouseDown
 
+// InventoryListViewItem_c::GetName (GUI.dll RVA 0x3ca3d, not exported):
+// String GetName() const, __thiscall returning through a hidden pointer,
+// RET 4 — a copy of the String at +0x4c. Only the list row update calls it,
+// to fill the row's own copy of the name (column 1), so prefixing the result
+// marks pinned rows without touching the name that sorting compares.
+//   push ebp; mov ebp,esp; push ecx; and dword [ebp-4],0; add ecx,0x4c; push ecx
+constexpr uint32_t kItemGetNameRVA = 0x3ca3d;
+constexpr uint8_t  kItemGetNameSig[] = {
+    0x55, 0x8B, 0xEC, 0x51, 0x83, 0x65, 0xFC, 0x00, 0x83, 0xC1, 0x4C, 0x51};
+constexpr char     kPinMarker[] = "* ";
+
+using FnGetName      = void*(__thiscall*)(const void* item, void* ret);
+using FnStringAssign = void*(__thiscall*)(void* str, const char* value);  // String::operator=
+static FnGetName      g_origGetName  = nullptr;
+static FnStringAssign g_stringAssign = nullptr;
+
 using FnGetListView     = void*(__thiscall*)(const void* item);       // MultiListViewItem_c::GetListView
 using FnGetLayoutMode   = int(__thiscall*)(const void* list);         // MultiListView_c::GetLayoutMode
 using FnGetSortOrder    = int(__thiscall*)(const void* list);         // MultiListView_c::GetActiveSortOrder
@@ -65,6 +81,7 @@ using FnCanSort         = bool(__thiscall*)(const void* list);        // MultiLi
 using FnSort            = void(__thiscall*)(void* list, bool force);  // MultiListView_c::Sort
 using FnVariantIdentity = AOIdentity*(__thiscall*)(const void* variant, AOIdentity* ret);
 using FnGetQualifiers   = unsigned(__thiscall*)(const void* view);       // View::GetQualifiers
+using FnInvalidateItem  = void(__thiscall*)(void* list, void* item);      // MultiListView_c::InvalidateItem
 using FnN3GetInstance   = void*(__cdecl*)();
 using FnGetClientInst   = unsigned(__thiscall*)(const void* n3);
 
@@ -75,6 +92,7 @@ static FnCanSort         g_canSort         = nullptr;
 static FnSort            g_sort            = nullptr;
 static FnVariantIdentity g_variantIdentity = nullptr;
 static FnGetQualifiers   g_getQualifiers   = nullptr;
+static FnInvalidateItem  g_invalidateItem  = nullptr;
 static FnN3GetInstance   g_n3GetInstance   = nullptr;
 static FnGetClientInst   g_getClientInst   = nullptr;
 
@@ -219,6 +237,18 @@ static int __fastcall CompareDetour(void* item, void* /*edx*/, void* other, int 
     return g_origCompare(item, other, column);
 }
 
+// ── Marker ─────────────────────────────────────────────────────────────
+
+static void* __fastcall GetNameDetour(const void* item, void* /*edx*/, void* ret) {
+    g_origGetName(item, ret);
+    if (IsPinsEnabled() && EnsurePinsLoaded() && PinRank(item) >= 0) {
+        std::string marked = kPinMarker;
+        marked += static_cast<const AOString*>(ret)->c_str();
+        g_stringAssign(ret, marked.c_str());
+    }
+    return ret;
+}
+
 // ── Click ──────────────────────────────────────────────────────────────
 
 static void __fastcall SplitMouseDownDetour(
@@ -254,6 +284,7 @@ bool TogglePinFromClick(void* list, void* item) {
     Log("[pins] %s %08X:%08X \"%s\", %u pinned", pinned ? "pinned" : "unpinned",
         id.type, id.instance, name, static_cast<unsigned>(g_pins.size()));
 
+    if (g_origGetName) g_invalidateItem(list, item);  // redraw with/without the marker
     if (g_getLayoutMode(list) == kLayoutList && g_canSort(list)) g_sort(list, true);
     return true;
 }
@@ -286,6 +317,8 @@ bool InitInventoryPins() {
     ok &= Resolve(g_sort,          "GUI.dll", "?Sort@MultiListView_c@@QAEX_N@Z");
     ok &= Resolve(g_getQualifiers, "GUI.dll", "?GetQualifiers@View@@QBEIXZ");
     ok &= Resolve(g_baseMouseDown, "GUI.dll", "?MouseDown@MultiListView_c@@UAEXABVPoint@@HH@Z");
+    ok &= Resolve(g_invalidateItem, "GUI.dll", "?InvalidateItem@MultiListView_c@@QAEXPAVMultiListViewItem_c@@@Z");
+    ok &= Resolve(g_stringAssign, "Utils.dll", "??4String@@QAEAAV0@PBD@Z");
     ok &= Resolve(g_variantIdentity, "Utils.dll", "??BVariant@@QBE?AVIdentity_t@@XZ");
     ok &= Resolve(g_n3GetInstance, "Interfaces.dll", "?GetInstance@N3InterfaceModule_t@@SAPAV1@XZ");
     ok &= Resolve(g_getClientInst, "Interfaces.dll", "?GetClientInst@N3InterfaceModule_t@@QBEIXZ");
@@ -333,6 +366,15 @@ bool InitInventoryPins() {
                             reinterpret_cast<void*>(&SplitMouseDownDetour),
                             reinterpret_cast<void**>(&g_origSplitMouseDown))) {
         Log("[pins] split mouse-down hook failed — stacks can't be pinned");
+    }
+
+    void* getName = ResolveRVA("GUI.dll", kItemGetNameRVA);
+    if (!getName || std::memcmp(getName, kItemGetNameSig, sizeof(kItemGetNameSig)) != 0) {
+        Log("[pins] GetName at RVA 0x%X doesn't match (client update?) — no pin marker",
+            kItemGetNameRVA);
+    } else if (!InstallHook(getName, reinterpret_cast<void*>(&GetNameDetour),
+                            reinterpret_cast<void**>(&g_origGetName))) {
+        Log("[pins] GetName hook failed — no pin marker");
     }
 
     Log("[pins] ctrl+alt+click pinning installed (pins in %s)", g_pinsPath);

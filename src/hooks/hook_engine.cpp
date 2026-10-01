@@ -65,6 +65,8 @@ uint8_t InstructionLength(const uint8_t* bytes) {
         if (mod == 3) return 2;                            // mov r32, r32
         if (mod == 1 && rm != 4) return 3;                 // mov r32, [r32+disp8]
     }
+    if (op == 0x83 && (bytes[1] >> 6) == 1 && (bytes[1] & 7) != 4)
+        return 4;                                          // op [r32+disp8], imm8
     return 0;
 }
 
