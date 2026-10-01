@@ -67,7 +67,8 @@ static FnVariantIdentity g_variantIdentity = nullptr;
 // InventoryViewBase_c: the container this view shows, and a flag that is
 // set for the main inventory. The stock slot uses the item on a click
 // (N3Msg_UseItem) exactly when flag && container.type != 0xDEAD, and moves
-// it to the main inventory otherwise — so that condition is "main inventory".
+// it to the main inventory otherwise. Backpack views have the flag too; see
+// IsMainInventoryView.
 constexpr uint32_t kViewContainerOffset = 0x140;
 constexpr uint32_t kViewMainFlagOffset  = 0x14c;
 constexpr uint32_t kInvalidType         = 0xDEAD;
@@ -135,10 +136,20 @@ static bool IsTradeOpen() {
     return module && g_getTradeView(module);
 }
 
+static bool IsOpenContainer(const AOIdentity& id) {
+    for (const auto& open : g_openContainers)
+        if (SameIdentity(open, id)) return true;
+    return false;
+}
+
+// The flag is also set in backpack views (tested: Ctrl+click in a backpack
+// sent its items back into the same backpack), so a view showing one of the
+// open containers doesn't count as the main inventory.
 static bool IsMainInventoryView(const void* view) {
     auto* p = static_cast<const uint8_t*>(view);
     auto* container = reinterpret_cast<const AOIdentity*>(p + kViewContainerOffset);
-    return p[kViewMainFlagOffset] != 0 && container->type != kInvalidType;
+    return p[kViewMainFlagOffset] != 0 && container->type != kInvalidType &&
+           !IsOpenContainer(*container);
 }
 
 // Returns true if the click was handled here.
@@ -157,8 +168,11 @@ static bool TryMoveToBackpack(void* view, void* item) {
     void* n3 = g_n3GetInstance();
     if (!n3) return false;
 
-    Log("[bagmove] item %08X:%08X -> container %08X:%08X",
-        itemId.type, itemId.instance, target.type, target.instance);
+    auto* viewContainer = reinterpret_cast<const AOIdentity*>(
+        static_cast<const uint8_t*>(view) + kViewContainerOffset);
+    Log("[bagmove] item %08X:%08X (view %08X:%08X) -> container %08X:%08X",
+        itemId.type, itemId.instance, viewContainer->type, viewContainer->instance,
+        target.type, target.instance);
     g_containerAdd(n3, &target, &itemId);
     return true;
 }

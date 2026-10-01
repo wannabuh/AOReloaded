@@ -90,7 +90,13 @@ Awesomium's Shift/Ctrl/Alt (1/2/4), which confirms the meaning.
   Open containers come from hooking `InventoryGUIModule_c::SlotContainerOpened/Closed`
   (both exported; `SlotContainerOpened` starts with `mov eax, imm32`, which the hook engine
   already supports).
-- "Main inventory" is the stock UseItem condition: `view+0x14c != 0 && view+0x140 (type) != 0xDEAD`.
+- "Main inventory" is the stock UseItem condition, `view+0x14c != 0 && view+0x140 (type) != 0xDEAD`,
+  minus views whose `+0x140` is an open container: backpack views have the flag set too
+  (tested: Ctrl+click in a backpack sent the item back into the same backpack).
+- `SlotContainerClosed` starts `push ebp; mov ebp,esp; push esi; push [ebp+8]` (`55 8B EC 56 FF 75 08`).
+  The hook engine used to copy 5 bytes for any `55 8B EC 5x` prologue, splitting the 3-byte
+  push and crashing (ILLEGAL_INSTRUCTION in the trampoline) whenever a container closed or
+  the player zoned. It now decodes the 5th instruction and copies all of it.
 
 ## Open questions (need an in-game test)
 
