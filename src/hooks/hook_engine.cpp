@@ -84,7 +84,8 @@ PrologueMatch MatchPrologue(const uint8_t* bytes) {
         // its first byte would leave a split instruction in the trampoline
         // (e.g. "push esi; push [ebp+8]": 55 8B EC 56 FF 75 08), so copy the
         // whole of it, or refuse the hook if its length isn't known.
-        if (pat.mask[4] == 0x00) {
+        // (mov-eax-imm32 wildcards bytes 1-4 too, but they're its own imm32.)
+        if (pat.bytes[0] == 0x55 && pat.mask[4] == 0x00) {
             const uint8_t len = InstructionLength(bytes + 4);
             if (len == 0) return { nullptr, 0 };
             return { pat.name, static_cast<uint8_t>(4 + len) };
