@@ -42,12 +42,29 @@ using FnCompare = int(__thiscall*)(void* item, void* other, int column);
 static FnCompare g_origCompare = nullptr;
 static void*     g_itemVtable  = nullptr;
 
+// ItemListViewBase_c's MouseDown override, GUI.dll RVA 0x40f22, not exported.
+// __thiscall, RET 0xC: (Point const&, int button, int flags). On button 1
+// over a stack (count > 1) with Ctrl held it starts the stock split (picks up
+// one, drag sideways for more); otherwise it calls MultiListView_c::MouseDown.
+// Ctrl+Alt is the pin gesture, so with Alt held too it goes straight to the
+// base class instead. Checked before hooking: the frame prologue, then
+// push 0; push <RTTI descriptor> (an absolute address, relocated).
+constexpr uint32_t kSplitMouseDownRVA  = 0x40f22;
+constexpr uint32_t kSplitMouseDownRtti = 0x264934;
+constexpr uint8_t  kSplitMouseDownSig[] = {
+    0x55, 0x8B, 0xEC, 0x51, 0x51, 0x53, 0x56, 0x57, 0x6A, 0x00, 0x68};
+
+using FnMouseDown = void(__thiscall*)(void* list, const void* point, int button, int flags);
+static FnMouseDown g_origSplitMouseDown = nullptr;
+static FnMouseDown g_baseMouseDown      = nullptr;  // MultiListView_c::MouseDown
+
 using FnGetListView     = void*(__thiscall*)(const void* item);       // MultiListViewItem_c::GetListView
 using FnGetLayoutMode   = int(__thiscall*)(const void* list);         // MultiListView_c::GetLayoutMode
 using FnGetSortOrder    = int(__thiscall*)(const void* list);         // MultiListView_c::GetActiveSortOrder
 using FnCanSort         = bool(__thiscall*)(const void* list);        // MultiListView_c::CanSort
 using FnSort            = void(__thiscall*)(void* list, bool force);  // MultiListView_c::Sort
 using FnVariantIdentity = AOIdentity*(__thiscall*)(const void* variant, AOIdentity* ret);
+using FnGetQualifiers   = unsigned(__thiscall*)(const void* view);       // View::GetQualifiers
 using FnN3GetInstance   = void*(__cdecl*)();
 using FnGetClientInst   = unsigned(__thiscall*)(const void* n3);
 
@@ -57,6 +74,7 @@ static FnGetSortOrder    g_getSortOrder    = nullptr;
 static FnCanSort         g_canSort         = nullptr;
 static FnSort            g_sort            = nullptr;
 static FnVariantIdentity g_variantIdentity = nullptr;
+static FnGetQualifiers   g_getQualifiers   = nullptr;
 static FnN3GetInstance   g_n3GetInstance   = nullptr;
 static FnGetClientInst   g_getClientInst   = nullptr;
 
@@ -65,6 +83,10 @@ static FnGetClientInst   g_getClientInst   = nullptr;
 constexpr uint32_t kItemVariantOffset = 0x20;  // Variant ID (Identity_t)
 constexpr uint32_t kItemNameOffset    = 0x4c;  // String, compared for column 1
 constexpr int      kLayoutList        = 1;     // MultiListView_c +0x158: 0 grid, 1 list
+
+// Qualifier bits from WindowController_c::GetQualifiers.
+constexpr unsigned kQualifierCtrl = 0xC;
+constexpr unsigned kQualifierAlt  = 0x30;
 
 // ── Pins ───────────────────────────────────────────────────────────────
 
@@ -199,6 +221,16 @@ static int __fastcall CompareDetour(void* item, void* /*edx*/, void* other, int 
 
 // ── Click ──────────────────────────────────────────────────────────────
 
+static void __fastcall SplitMouseDownDetour(
+        void* list, void* /*edx*/, const void* point, int button, int flags) {
+    const unsigned q = g_getQualifiers(list);
+    if ((q & kQualifierCtrl) && (q & kQualifierAlt) && IsPinsEnabled()) {
+        g_baseMouseDown(list, point, button, flags);  // no split: the click pins
+        return;
+    }
+    g_origSplitMouseDown(list, point, button, flags);
+}
+
 bool TogglePinFromClick(void* list, void* item) {
     if (!g_origCompare || !IsInventoryItem(item) || !IsPinsEnabled()) return false;
     if (!EnsurePinsLoaded()) {
@@ -252,6 +284,8 @@ bool InitInventoryPins() {
     ok &= Resolve(g_getSortOrder,  "GUI.dll", "?GetActiveSortOrder@MultiListView_c@@ABE?AW4SortOrder_e@1@XZ");
     ok &= Resolve(g_canSort,       "GUI.dll", "?CanSort@MultiListView_c@@QBE_NXZ");
     ok &= Resolve(g_sort,          "GUI.dll", "?Sort@MultiListView_c@@QAEX_N@Z");
+    ok &= Resolve(g_getQualifiers, "GUI.dll", "?GetQualifiers@View@@QBEIXZ");
+    ok &= Resolve(g_baseMouseDown, "GUI.dll", "?MouseDown@MultiListView_c@@UAEXABVPoint@@HH@Z");
     ok &= Resolve(g_variantIdentity, "Utils.dll", "??BVariant@@QBE?AVIdentity_t@@XZ");
     ok &= Resolve(g_n3GetInstance, "Interfaces.dll", "?GetInstance@N3InterfaceModule_t@@SAPAV1@XZ");
     ok &= Resolve(g_getClientInst, "Interfaces.dll", "?GetClientInst@N3InterfaceModule_t@@QBEIXZ");
@@ -283,6 +317,23 @@ bool InitInventoryPins() {
     InterlockedExchangePointer(&vtable[1], reinterpret_cast<void*>(&CompareDetour));
     DWORD ignored = 0;
     VirtualProtect(&vtable[1], sizeof(void*), oldProtect, &ignored);
+
+    // Without this, Ctrl+Alt+click on a stack starts a split instead of pinning.
+    // InstallHook publishes the original before patching, so the detour never
+    // sees it null even though the game thread is already running.
+    auto* split = static_cast<const uint8_t*>(ResolveRVA("GUI.dll", kSplitMouseDownRVA));
+    const auto gui = reinterpret_cast<uintptr_t>(GetModuleHandleA("GUI.dll"));
+    uint32_t rtti = 0;
+    if (split) std::memcpy(&rtti, split + sizeof(kSplitMouseDownSig), 4);
+    if (!split || std::memcmp(split, kSplitMouseDownSig, sizeof(kSplitMouseDownSig)) != 0 ||
+        rtti != gui + kSplitMouseDownRtti) {
+        Log("[pins] split mouse-down at RVA 0x%X doesn't match (client update?) — "
+            "stacks can't be pinned", kSplitMouseDownRVA);
+    } else if (!InstallHook(const_cast<uint8_t*>(split),
+                            reinterpret_cast<void*>(&SplitMouseDownDetour),
+                            reinterpret_cast<void**>(&g_origSplitMouseDown))) {
+        Log("[pins] split mouse-down hook failed — stacks can't be pinned");
+    }
 
     Log("[pins] ctrl+alt+click pinning installed (pins in %s)", g_pinsPath);
     return true;

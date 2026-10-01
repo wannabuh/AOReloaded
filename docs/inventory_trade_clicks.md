@@ -116,6 +116,11 @@ Awesomium's Shift/Ctrl/Alt (1/2/4), which confirms the meaning.
   `0x1003cc19`): column 0 = grid position, 1 = name (`String` at `+0x4c`), 2..16 = ints at
   `+0x70 + col*4`. Pins replace that slot; Ctrl+Alt+click arrives through alt_select's
   list mouse-up hook.
+- Stack split: `ItemListViewBase_c`'s `MouseDown` override (`0x10040f22`) starts a split on
+  button 1 over an item whose count (column 2) is > 1 when `GetQualifiers() & 0xC` (Ctrl),
+  ignoring Alt: it picks up 1, mouse-x movement changes the amount (`+0x308`), and mouse-up
+  emits the drag with that `split_count`. Ctrl+Alt is the pin gesture, so the pin hook sends
+  that press straight to `MultiListView_c::MouseDown` instead.
 
 ## Open questions (need an in-game test)
 

@@ -10,6 +10,8 @@
 // sorted insertion of a new item — so this replaces that one vtable slot of
 // InventoryListViewItem_c with a wrapper that orders pinned items first and
 // leaves every other comparison to the original. Grid mode is untouched.
+// Ctrl+press on a stack normally starts the stock split; with Alt held too
+// that is skipped, so stacks can be pinned.
 //
 // Pins are per character, keyed by the item's identity (its slot) plus its
 // name, and saved in AOReloadedPins.ini next to the exe. An item that moves
