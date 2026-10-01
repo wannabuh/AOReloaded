@@ -13,6 +13,7 @@
 // file locking and atomic writes.
 
 #include "core/settings.h"
+#include "core/renderer_settings.h"
 #include "core/logging.h"
 #include "ao/game_api.h"
 #include "ao/types.h"
@@ -93,7 +94,7 @@ static const char kIniSection[] = "AOReloaded";
 // RVAs for the global std::map internals in Utils.dll.
 static constexpr uint32_t kMyHeadRVA = 0x2e61c;
 
-static bool SetDValueMinMax(const char* name, int minVal, int maxVal) {
+bool SetDValueMinMax(const char* name, int minVal, int maxVal) {
     HMODULE utils = GetModuleHandleA("Utils.dll");
     if (!utils) return false;
 
@@ -248,8 +249,11 @@ static void __cdecl SetDValueDetour(const AOString& name, const AOVariant& value
     // Always call the original first — the game must see the change.
     g_origSetDValue(name, value);
 
-    // Quick prefix check: all our settings start with "AOR_".
+    // Quick prefix check: all our settings start with "AOR_"; "RVK_" ones belong to the renderer, which
+    // applies and saves them itself.
     const char* str = name.c_str();
+    if (RendererOnSetDValue(str, value))
+        return;
     if (str[0] != 'A' || str[1] != 'O' || str[2] != 'R' || str[3] != '_')
         return;
 
@@ -444,8 +448,9 @@ static void PatchSingleRootXml(const char* xmlPath) {
     while (oldStart) {
         // Check if THIS ScrollView is the AOReloaded one.
         char* tagEnd = std::strchr(oldStart, '>');
-        if (tagEnd && std::strstr(oldStart, "label=\"AOReloaded\"") &&
-            std::strstr(oldStart, "label=\"AOReloaded\"") < tagEnd + 1) {
+        const char* aorLabel = std::strstr(oldStart, "label=\"AOReloaded\"");
+        const char* rvkLabel = std::strstr(oldStart, "label=\"Renderer\"");
+        if (tagEnd && ((aorLabel && aorLabel < tagEnd + 1) || (rvkLabel && rvkLabel < tagEnd + 1))) {
             // Found it. Find the matching </ScrollView>.
             char* closeTag = std::strstr(oldStart, "</ScrollView>");
             if (closeTag) {
@@ -454,7 +459,9 @@ static void PatchSingleRootXml(const char* xmlPath) {
                 while (*closeTag == '\n' || *closeTag == '\r') ++closeTag;
                 // Remove by shifting the rest of the buffer over.
                 std::memmove(oldStart, closeTag, std::strlen(closeTag) + 1);
-                Log("[settings] removed old AOReloaded block from: %s", xmlPath);
+                Log("[settings] removed old AOReloaded/Renderer block from: %s", xmlPath);
+                oldStart = std::strstr(buf, "<ScrollView");   // the other one may still be there
+                continue;
             }
             break;
         }
@@ -470,15 +477,20 @@ static void PatchSingleRootXml(const char* xmlPath) {
 
     size_t prefixLen = static_cast<size_t>(endTag - buf);
     size_t blockLen = std::strlen(kAorXmlBlock);
+    // The renderer's tab, if a randy-vk renderer with a settings interface is loaded.
+    const char* rendererBlock = RendererXmlBlock();
+    size_t rendererLen = rendererBlock ? std::strlen(rendererBlock) : 0;
     size_t suffixLen = std::strlen(endTag);
 
-    auto* newBuf = new(std::nothrow) char[prefixLen + blockLen + suffixLen + 1];
+    auto* newBuf = new(std::nothrow) char[prefixLen + blockLen + rendererLen + suffixLen + 1];
     if (!newBuf) { delete[] buf; return; }
 
     std::memcpy(newBuf, buf, prefixLen);
     std::memcpy(newBuf + prefixLen, kAorXmlBlock, blockLen);
-    std::memcpy(newBuf + prefixLen + blockLen, endTag, suffixLen);
-    size_t totalLen = prefixLen + blockLen + suffixLen;
+    if (rendererLen)
+        std::memcpy(newBuf + prefixLen + blockLen, rendererBlock, rendererLen);
+    std::memcpy(newBuf + prefixLen + blockLen + rendererLen, endTag, suffixLen);
+    size_t totalLen = prefixLen + blockLen + rendererLen + suffixLen;
     newBuf[totalLen] = '\0';
     delete[] buf;
 
@@ -642,6 +654,8 @@ void SettingsRegisterAll() {
             break;
         }
     }
+    // A custom renderer's settings (randy-vk), if it has a settings interface.
+    RendererSettingsRegisterAll();
 }
 
 bool SettingsInstallHook() {

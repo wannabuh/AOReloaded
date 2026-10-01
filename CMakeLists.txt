@@ -35,6 +35,7 @@ add_library(AOReloaded SHARED
     src/core/logging.cpp
     src/core/laa_patch.cpp
     src/core/settings.cpp
+    src/core/renderer_settings.cpp
     src/core/fps_cap.cpp
     src/ao/game_api.cpp
     src/ao/dvalue_dump.cpp

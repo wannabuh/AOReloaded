@@ -48,6 +48,9 @@ bool SettingsInstallHook();
 
 using SettingChangedCallback = void(*)(const char* name, int newValue);
 
+// Give an Int DValue the min/max an OptionSlider needs (also used for the renderer settings tab).
+bool SetDValueMinMax(const char* name, int minVal, int maxVal);
+
 // Register a callback.  Up to 4 callbacks supported.
 void RegisterSettingCallback(SettingChangedCallback cb);
 
