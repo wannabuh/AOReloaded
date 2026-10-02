@@ -46,6 +46,12 @@ The action timer bars (nano casting, item equip/unequip, reload, attack cooldown
 - Height slider (default: 10 — native fill-sprite height; pixel-perfect at this value)
 - "Show preview bars" checkbox — toggles the five dummy bars AND enables drag-to-reposition. Disabled by default.
 
+### Skills Window: Favorites and Shift+Click
+- **Favorites** — a new **Favorites** group at the top of the skills window, above Abilities. Ctrl+Alt+click a skill in any group to add it to your favorites (its name gets a "* " in front); Ctrl+Alt+click it again to remove it. Raise and lower skills in Favorites exactly like in the other groups — points added there show up in the skill's own group too, and IP is only spent once. Favorites are saved per character in `AOReloadedSkills.ini` next to the game exe.
+- **Shift+click** on a skill's **+** or **-** changes it by 5 instead of 1 (less if you hit the skill cap or run out of IP). Ctrl+click still goes all the way to the cap (or back to zero) like before.
+
+**Config:** Options panel (F10) → **AOReloaded** tab → **Input** → "Ctrl+Alt+click a skill to add it to the Favorites group" and "Shift+click on a skill's + or - changes it by 5". Both enabled by default.
+
 <!-- 
 Template for adding features:
 

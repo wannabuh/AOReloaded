@@ -408,3 +408,37 @@ The heading at `+0x1F8` is in **character-local space** (pre-rotation). RecalcOp
 ### Reset flag (alternative reset path — not currently used)
 
 Setting bit `0x2000` on `n3Camera_t+0x184` (the camera flags field) makes the next per-frame camera update call the real "behind character" reset routine (the same path used by `COMMAND_RESET_CAMERA` / Numpad 5). The reset uses character facing, not camera position, so it produces a clean snap. This is what we used during early prototyping before switching to the per-frame heading lerp.
+
+## Skills window (`SkillWindow`, GUI.dll)
+
+Used by `src/hooks/skill_favorites.cpp`. All RVAs are GUI.dll; all functions below start with the
+SEH prolog `B8 <EH table> E8 <__EH_prolog @ 0x1738a4>`.
+
+Layout comes from `cd_image/gui/<GUI>/Views/Skills.xml` (loaded in the ctor via `"%sViews/Skills.xml"`).
+
+| Function | RVA | Notes |
+|---|---|---|
+| `SkillWindow::SkillWindow()` | `0xfc18e` | `__thiscall`, RET. Calls InitGroups, then per group finds `<name>_view` (compact list), `<name>_group` (full page) and Button `<name>`; per stat makes two `StatRow`s (compact, full). Group 10 rows are made "disabled". |
+| `InitGroups()` | `0xfb596` | `__thiscall`, RET. Fills `+0x7c` (11 groups) and `+0x8c` (stat lists). |
+| `DistributeIP(vector<int>* changed)` | `0xfac49` | "Suggested IP distribution" worker, RET 4. Walks groups→stats, finds rows by `"<StatName>_row_ext"`. |
+| `OnRowClicked(ButtonBase_c*)` | `0xf97a6` | RET 4. Slot for each StatRow's click signal (+0x148): shows details. |
+| `OnGroupButton(ButtonBase_c*)` | `0xf9552` | RET 4. Minimized: toggles `<group>_view` (accordion, open view at `+0x78`). Full: selects page **by group index** in ViewSelector `groupselect`. |
+| `OnAccept()` | `0xfa5dd` | For every group stat: FindChild `"<StatName>_row"` (minimized) or `"_row_ext"`, collects base+pending, sends. |
+| `SetMinimized` sync | `0xfa1ab` | Copies pending points between the `_row` and `_row_ext` sets: `dst+0x1b0 = src+0x1b0; dst.ChangeDelta(0)`. |
+| `StatRow::StatRow(Stat_e, bool full, bool disabled)` | `0xfe956` | RET 0xC. Row name `"<StatName>_row"` / `"_row_ext"`. |
+| `StatRow::~StatRow()` | `0xff3f4` | RET (scalar deleting dtor `0xff48a` calls it). |
+| `bool StatRow::ChangeDelta(int)` | `0xfde49` | RET 4. Adds to pending, charges the IP difference through signal +0x188 (→ `SkillWindow 0xfa185`, false = can't pay) and backs off one point at a time; `0` = redraw + recompute charge without charging. Abilities: also `N3Msg_SetSkillTmp` when visible. |
+| Increase pressed / released | `0xfe261` / `0xfe361` | RET. Pressed: fire click signal, +1, start repeat timer `+0x190` (500 ms, then 50 ms ticks → `0xfe5d7`). Released: stop timer; **any qualifier** → jump to cap; fire click signal. |
+| Decrease pressed / released | `0xfe0ca` / `0xfe1b4` | Same with timer `+0x194`; qualifier → back to zero. |
+
+`SkillWindow` fields: `+0x74` root View*, `+0x78` open compact view, `+0x7c` `vector<Group>`
+(stride 0x38: String label, String name at +0x1c), `+0x8c` `vector<vector<Stat_e>>` (stride 0x10),
+`+0xac` remaining IP, `+0xb8` bool minimized. Vectors here are `{first, last, end, alloc}`.
+Helpers: `vector<Group>::push_back` `0xff7cc`, `vector<vector<int>>::resize` `0xff558`,
+`vector<int>::push_back` `0x64bee` (all `__thiscall`, RET 4).
+
+`StatRow` (derives from `ButtonBase_c`): `+0x198` TextView_c* name label (text = stat name, only
+its colour changes later), `+0x19c`/`+0x1a0` +/- Button_c (signals +0x74 pressed, +0x78 released),
+`+0x1a4` stat, `+0x1a8` buffed, `+0x1ac` base, `+0x1b0` pending points, `+0x1b4` cap,
+`+0x1b8` IP charged for the pending points, `+0x1bc` value label, `+0x1c4` full-view flag,
+`+0x1cc` disabled.

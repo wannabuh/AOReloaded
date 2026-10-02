@@ -25,6 +25,7 @@
 #include "hooks/bag_move.h"
 #include "hooks/alt_select.h"
 #include "hooks/inventory_pins.h"
+#include "hooks/skill_favorites.h"
 
 #include <windows.h>
 
@@ -76,6 +77,7 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     // Ensure the AOReloaded tab exists in the options panel XML.
     // Must happen before the game parses Root.xml (during world load).
     aor::PatchOptionsXml();
+    aor::PatchSkillsXml();
 
     // Apply the frame rate cap now so it also covers the login screens.
     // The slider callback only fires once SettingsInstallHook() is in.
@@ -99,6 +101,11 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     // Pinned inventory items (Ctrl+Alt+click, forwarded by alt select).
     if (!aor::InitInventoryPins()) {
         aor::Log("[init] inventory pins failed — ctrl+alt+click won't pin items");
+    }
+
+    // Skills window: Favorites group (Ctrl+Alt+click) and Shift+click +/-5.
+    if (!aor::InitSkillFavorites()) {
+        aor::Log("[init] skill favorites failed — skills window unchanged");
     }
 
     // Wait for game world. 

@@ -36,6 +36,11 @@ void SettingsRegisterAll();
 // Must be called BEFORE the game parses the XML (i.e. before game world).
 void PatchOptionsXml();
 
+// Call fn with the path of `relPath` (e.g. "Views\\Skills.xml") inside every
+// GUI folder: cd_image/gui/Default, the other GUIs in cd_image/gui, and the
+// custom GUIs under %LocalAppData%. The file may not exist; fn must check.
+void ForEachGuiFile(const char* relPath, void (*fn)(const char* path));
+
 // Step 3: Install the SetDValue detour. Any subsequent SetDValue call
 // whose name matches a registered setting will trigger an .ini write.
 // Returns false if the hook couldn't be installed.
