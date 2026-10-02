@@ -200,16 +200,19 @@ void BuildXml()
         for (const RvkSettingInfo* c : childrenOf(s, true)) AppendCheckBox(out, end, *c, 30);
     }
 
-    // Values: a block per feature (its label) or, for values of no feature, per section.
+    // Values: a block per feature (its label) or, for values of no feature, one per section.
     AppendHeading(out, end, "Adjustments", 16);
+    const char* heading = "";
     for (const RvkSettingInfo& s : all) {
         if (s.type == kBool && !s.parent) {
             std::vector<const RvkSettingInfo*> values = childrenOf(s, false);
             if (values.empty()) continue;
             AppendHeading(out, end, s.label, 8);
+            heading = s.label;
             for (const RvkSettingInfo* v : values) AppendValue(out, end, *v);
         } else if (s.type != kBool && !s.parent) {
-            AppendHeading(out, end, s.section, 8);
+            if (!Is(heading, s.section)) AppendHeading(out, end, s.section, 8);
+            heading = s.section;
             AppendValue(out, end, s);
         }
     }
