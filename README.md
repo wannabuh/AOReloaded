@@ -15,7 +15,7 @@ This is a fork of [Inorien/AOReloaded](https://github.com/Inorien/AOReloaded) wi
 - **Alt+click multi-select** in inventory, backpack and trade/shop lists: move one, the rest follow.
 - **Inventory pins**: Ctrl+Alt+click keeps items at the top of inventory and backpack lists.
 - **Skills window**: a Favorites group (Ctrl+Alt+click a skill) and Shift+click +/- by 5.
-- **Renderer tab** for [randy-vk](https://github.com/wannabuh/randy-vk), a Vulkan replacement for the game's
+- **Renderer tab** for [ao-vk](https://github.com/wannabuh/ao-vk), a Vulkan replacement for the game's
   renderer with modern lighting, shadows and effects.
 
 Everything is configurable in the **AOReloaded** tab (F10), and each feature can be switched off there.

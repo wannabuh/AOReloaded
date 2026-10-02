@@ -75,10 +75,10 @@ The moves go through the game's own drag-and-drop path, so the server sees exact
 
 **Config:** Options panel (F10) → **AOReloaded** tab → **Input**. Enabled by default.
 
-### Renderer Tab (randy-vk)
-With [randy-vk](https://github.com/wannabuh/randy-vk) installed (a Vulkan replacement for the game's renderer), the options panel gets a **Renderer** tab with all of its settings: every graphics feature as an on/off checkbox at the top, its sliders and choices (shadow resolutions, anisotropy) below, grouped by feature. Changes apply immediately and are saved by randy-vk in `randy-vk.ini`. Without randy-vk the tab simply doesn't appear.
+### Renderer Tab (ao-vk)
+With [ao-vk](https://github.com/wannabuh/ao-vk) installed (a Vulkan replacement for the game's renderer), the options panel gets a **Renderer** tab with all of its settings: every graphics feature as an on/off checkbox at the top, its sliders and choices (shadow resolutions, anisotropy) below, grouped by feature. Changes apply immediately and are saved by ao-vk in `randy-vk.ini`. Without ao-vk the tab simply doesn't appear.
 
-**Config:** none - present whenever randy-vk is installed.
+**Config:** none - present whenever ao-vk is installed.
 
 <!-- 
 Template for adding features:
