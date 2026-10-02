@@ -105,6 +105,8 @@ static FnPushBack    g_statPushBack    = nullptr;
 using FnGetQualifiers = unsigned(__thiscall*)(const void* view);              // View::GetQualifiers
 using FnShow          = void(__thiscall*)(void* view, bool show, bool relayout);  // View::Show
 using FnFindChild     = void*(__thiscall*)(void* view, const char* name, bool recursive);
+using FnGetFlags      = unsigned(__thiscall*)(const void* view, unsigned mask);
+using FnSetFlags      = void(__thiscall*)(void* view, unsigned flags);  // replaces all
 using FnGetText       = const AOString*(__thiscall*)(const void* textView);   // TextView_c::GetTextBuffer
 using FnSetText       = void(__thiscall*)(void* textView, const AOString* text);
 using FnStringAssign  = void*(__thiscall*)(void* str, const char* value);     // String::operator=
@@ -115,6 +117,8 @@ using FnGetClientInst = unsigned(__thiscall*)(const void* n3);
 static FnGetQualifiers g_getQualifiers = nullptr;
 static FnShow          g_show          = nullptr;
 static FnFindChild     g_findChild     = nullptr;
+static FnGetFlags      g_getFlags      = nullptr;
+static FnSetFlags      g_setFlags      = nullptr;
 static FnGetText       g_getText       = nullptr;
 static FnSetText       g_setText       = nullptr;
 static FnStringAssign  g_stringAssign  = nullptr;
@@ -142,6 +146,10 @@ constexpr uint32_t kRowCap       = 0x1b4;  // highest base skill allowed
 constexpr uint32_t kRowCharged   = 0x1b8;  // IP already charged for kRowPending
 constexpr uint32_t kRowFull      = 0x1c4;  // bool: full view row ("_row_ext")
 constexpr uint32_t kRowDisabled  = 0x1cc;  // bool: deprecated skill
+
+// View flag: a hidden view takes no room in its parent's layout
+// (view_flags="256" in the XML; the stock code sets it before hiding views).
+constexpr unsigned kViewCollapseHidden = 0x100;
 
 // Qualifier bits from WindowController_c::GetQualifiers.
 constexpr unsigned kQualifierShift = 0x3;
@@ -278,7 +286,10 @@ static void SetFavoriteMarker(void* row, bool favorite) {
 // Marker on every row of the skill; favorites group rows shown or hidden.
 static void ApplyFavorite(const RowInfo& info, bool favorite) {
     SetFavoriteMarker(info.row, favorite);
-    if (info.favorites) g_show(info.row, favorite, true);
+    if (!info.favorites) return;
+    const unsigned flags = g_getFlags(info.row, ~0u);
+    if (!(flags & kViewCollapseHidden)) g_setFlags(info.row, flags | kViewCollapseHidden);
+    g_show(info.row, favorite, true);
 }
 
 // ── Keeping the rows of a skill in step ────────────────────────────────
@@ -661,6 +672,8 @@ bool InitSkillFavorites() {
     ok &= Resolve(g_getQualifiers, "GUI.dll", "?GetQualifiers@View@@QBEIXZ");
     ok &= Resolve(g_show,          "GUI.dll", "?Show@View@@QAEX_N0@Z");
     ok &= Resolve(g_findChild,     "GUI.dll", "?FindChild@View@@QAEPAV1@PBD_N@Z");
+    ok &= Resolve(g_getFlags,      "GUI.dll", "?GetFlags@View@@QBEII@Z");
+    ok &= Resolve(g_setFlags,      "GUI.dll", "?SetFlags@View@@QAEXI@Z");
     ok &= Resolve(g_getText, "GUI.dll",
         "?GetTextBuffer@TextView_c@@QBEABV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@XZ");
     ok &= Resolve(g_setText, "GUI.dll",
