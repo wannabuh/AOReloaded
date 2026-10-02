@@ -52,6 +52,34 @@ The action timer bars (nano casting, item equip/unequip, reload, attack cooldown
 
 **Config:** Options panel (F10) → **AOReloaded** tab → **Input** → "Ctrl+Alt+click a skill to add it to the Favorites group" and "Shift+click on a skill's + or - changes it by 5". Both enabled by default.
 
+### Frame Rate Cap
+The client normally limits itself to 100 FPS. A slider sets the limit anywhere from 30 to 500 FPS; it changes the game's own frame limiter, so it applies immediately.
+
+**Config:** Options panel (F10) → **AOReloaded** tab → **Performance** → frame rate cap (default 100, the stock value).
+
+### Ctrl+Click Item Moves (Backpacks)
+- **Ctrl+click** an item in your main inventory to move it into the backpack you opened last.
+- **Ctrl+click** an item in an open backpack to move it back to your inventory.
+
+The moves go through the game's own drag-and-drop path, so the server sees exactly what it would for a manual drag. (Selling with a shop open is the stock Ctrl+right-click.)
+
+**Config:** Options panel (F10) → **AOReloaded** tab → **Input**. Enabled by default.
+
+### Alt+Click Multi-Select
+**Alt+click** items in an inventory, backpack or trade/shop list to select several (Alt+click empty space clears the selection). Then move any one of them the usual way - drag it onto a backpack, the inventory or a trade/shop window, or Ctrl+/right-click it - and the same move is repeated for the rest of the selection, as if you had moved each by hand. Drops on the ground and moves to a specific inventory slot are not repeated.
+
+**Config:** Options panel (F10) → **AOReloaded** tab → **Input**. Enabled by default.
+
+### Inventory Pins
+**Ctrl+Alt+click** an item (or a stack) in an inventory or backpack list to pin it: pinned items stay at the top of the list, in the order you pinned them, whatever column the list is sorted by. Pinned rows show "* " before the name. Ctrl+Alt+click again to unpin. Pins are saved per character in `AOReloadedPins.ini` next to the game exe; an item moved to another slot is no longer pinned. (List mode only; grid mode is unchanged.)
+
+**Config:** Options panel (F10) → **AOReloaded** tab → **Input**. Enabled by default.
+
+### Renderer Tab (randy-vk)
+With [randy-vk](https://github.com/wannabuh/randy-vk) installed (a Vulkan replacement for the game's renderer), the options panel gets a **Renderer** tab with all of its settings: every graphics feature as an on/off checkbox at the top, its sliders and choices (shadow resolutions, anisotropy) below, grouped by feature. Changes apply immediately and are saved by randy-vk in `randy-vk.ini`. Without randy-vk the tab simply doesn't appear.
+
+**Config:** none - present whenever randy-vk is installed.
+
 <!-- 
 Template for adding features:
 

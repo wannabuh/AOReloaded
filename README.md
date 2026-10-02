@@ -5,6 +5,21 @@ Client mod framework for Anarchy Online. Injects into the game process via DLL s
 Built for the [Project Rubi-Ka](https://project-rk.com/) private server.
 There are no guarantees of functionality nor stability on other Anarchy Online client distributions.
 
+### This fork
+
+This is a fork of [Inorien/AOReloaded](https://github.com/Inorien/AOReloaded) with these additions (details in
+[FEATURES.md](FEATURES.md)):
+
+- **Frame rate cap** slider (30-500 FPS) replacing the client's fixed 100 FPS limit.
+- **Ctrl+click item moves** between your inventory and the backpack you opened last.
+- **Alt+click multi-select** in inventory, backpack and trade/shop lists: move one, the rest follow.
+- **Inventory pins**: Ctrl+Alt+click keeps items at the top of inventory and backpack lists.
+- **Skills window**: a Favorites group (Ctrl+Alt+click a skill) and Shift+click +/- by 5.
+- **Renderer tab** for [randy-vk](https://github.com/wannabuh/randy-vk), a Vulkan replacement for the game's
+  renderer with modern lighting, shadows and effects.
+
+Everything is configurable in the **AOReloaded** tab (F10), and each feature can be switched off there.
+
 ## Installation
 
 1. Download `version.dll` from the [latest release](../../releases/latest).
