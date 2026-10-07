@@ -38,9 +38,22 @@ using FnCount = uint32_t (*)();
 using FnGet = int (*)(uint32_t, RvkSettingInfo*);
 using FnSet = int (*)(const char*, float);
 
+using FnPresetCount = uint32_t (*)();
+using FnPresetName = const char* (*)(uint32_t);
+using FnPresetIndex = int (*)(uint32_t);
+using FnPresetCurrent = int (*)();
+
 FnCount g_count;
 FnGet g_get;
 FnSet g_set;
+// Presets (RvkPresets_*, newer renderers): 0 Original, 1 Classic+, 2 Modern, 3 Ultra.
+FnPresetCount g_presetCount;
+FnPresetName g_presetName;
+FnPresetIndex g_presetApply;
+FnPresetCurrent g_presetCurrent;
+bool g_syncing;                 // pushing the renderer's values into the DValues: not changes from the panel
+constexpr const char* kPresetVar = "RVK_Preset";       // the preset buttons (kCustom: none matches)
+constexpr int kCustom = 99;
 uint32_t g_version;
 bool g_available;
 char g_xml[64 * 1024];
@@ -54,6 +67,12 @@ bool Resolve()
     g_get = reinterpret_cast<FnGet>(GetProcAddress(randy, "RvkSettings_Get"));
     g_set = reinterpret_cast<FnSet>(GetProcAddress(randy, "RvkSettings_Set"));
     if (!version || !g_count || !g_get || !g_set) return false;
+    g_presetCount = reinterpret_cast<FnPresetCount>(GetProcAddress(randy, "RvkPresets_Count"));
+    g_presetName = reinterpret_cast<FnPresetName>(GetProcAddress(randy, "RvkPresets_Name"));
+    g_presetApply = reinterpret_cast<FnPresetIndex>(GetProcAddress(randy, "RvkPresets_Apply"));
+    g_presetCurrent = reinterpret_cast<FnPresetCurrent>(GetProcAddress(randy, "RvkPresets_Current"));
+    if (!g_presetCount || !g_presetName || !g_presetApply || !g_presetCurrent)
+        g_presetCount = nullptr;                // an older renderer: no presets
     g_version = version();
     if (g_version != 1 && g_version != 2) {
         Log("[renderer] unknown settings interface version %u", g_version);
@@ -167,6 +186,55 @@ void AppendFrameRate(char*& out, char* end)
     Append(out, end, kFpsCapSliderXml);
 }
 
+int CurrentPreset()
+{
+    int p = g_presetCount ? g_presetCurrent() : -1;
+    return p < 0 ? kCustom : p;
+}
+
+// The preset buttons, at the top of the tab.
+void AppendPresets(char*& out, char* end)
+{
+    if (!g_presetCount) return;
+    AppendHeading(out, end, "Preset", 0);
+    Append(out, end, "        <OptionRadioButtonGroup label=\"Look:\" layout_borders=\"Rect(10,0,0,3)\""
+                     " opt_type=\"variant\" opt_variable=\"");
+    Append(out, end, kPresetVar);
+    Append(out, end, "\">\n");
+    uint32_t n = g_presetCount();
+    char line[160];
+    for (uint32_t i = 0; i < n; ++i) {
+        Append(out, end, "          <RadioButton label=\"");
+        AppendEscaped(out, end, g_presetName(i));
+        std::snprintf(line, sizeof(line), "\" value=\"%u\"/>\n", i);
+        Append(out, end, line);
+    }
+    std::snprintf(line, sizeof(line), "          <RadioButton label=\"Custom\" value=\"%d\"/>\n", kCustom);
+    Append(out, end, line);
+    Append(out, end, "        </OptionRadioButtonGroup>\n");
+    Append(out, end, "        <TextView value=\"To keep a setup of your own, back up randy-vk.ini.\""
+                     " layout_borders=\"Rect(10,0,0,3)\" />\n");
+    AppendHeading(out, end, "Frame rate", 12);
+    Append(out, end, kFpsCapSliderXml);
+}
+
+// Every renderer setting's DValue (and the preset buttons) set to the renderer's values - after a preset changed many
+// of them at once.
+void SyncAll()
+{
+    g_syncing = true;
+    uint32_t count = g_count();
+    for (uint32_t i = 0; i < count; ++i) {
+        RvkSettingInfo s;
+        if (!GetInfo(i, s) || std::strlen(s.name) > 15) continue;
+        if (s.type == kBool) GameAPI::SetBool(s.name, s.value != 0.0f);
+        else if (s.type == kFloat) GameAPI::SetInt(s.name, ToSteps(s, s.value));
+        else GameAPI::SetInt(s.name, static_cast<int>(s.value));
+    }
+    if (g_presetCount) GameAPI::SetInt(kPresetVar, CurrentPreset());
+    g_syncing = false;
+}
+
 // Version 2 layout: every on / off option at the top (by section, a feature's own options indented under it), then
 // the values (sliders, choices) in blocks headed by their feature.
 void BuildXml()
@@ -183,7 +251,8 @@ void BuildXml()
            "        <TextView value=\"randy-vk renderer\" layout_borders=\"Rect(0,0,0,5)\" />\n"
            "        <TextView value=\"Changes apply at once. Settings are saved to randy-vk.ini.\""
            " layout_borders=\"Rect(0,0,0,10)\" />\n");
-    AppendFrameRate(out, end);
+    if (g_presetCount) AppendPresets(out, end);
+    else AppendFrameRate(out, end);
     uint32_t count = g_count();
     std::vector<RvkSettingInfo> all;
     for (uint32_t i = 0; i < count; ++i) {
@@ -299,6 +368,9 @@ void RendererSettingsRegisterAll()
             SetDValueMinMax(s.name, ToSteps(s, s.min), ToSteps(s, s.max));
         }
     }
+    if (g_presetCount) {
+        GameAPI::RegisterInt(kPresetVar, CurrentPreset());
+    }
     if (g_version >= 2) BuildXml();
     else BuildXmlV1();
     Log("[renderer] %u renderer settings registered (interface %u, options XML %u bytes)", count, g_version,
@@ -311,6 +383,24 @@ bool RendererOnSetDValue(const char* name, const AOVariant& value)
 {
     if (!g_available || std::strncmp(name, "RVK_", 4) != 0)
         return false;
+    if (g_syncing)
+        return true;                            // our own update of the panel
+    auto asInt = [&]() -> int {
+        switch (value.type) {
+        case static_cast<uint32_t>(VariantType::Bool): return value.as_bool ? 1 : 0;
+        case static_cast<uint32_t>(VariantType::Int): return value.as_int;
+        case static_cast<uint32_t>(VariantType::Float): return static_cast<int>(value.as_float);
+        case static_cast<uint32_t>(VariantType::Double): return static_cast<int>(value.as_double);
+        default: return -1;
+        }
+    };
+    if (g_presetCount && std::strcmp(name, kPresetVar) == 0) {
+        int p = asInt();
+        if (p >= 0 && p != kCustom && g_presetApply(static_cast<uint32_t>(p)))
+            Log("[renderer] preset %s", g_presetName(static_cast<uint32_t>(p)));
+        SyncAll();                              // the panel shows the preset's values
+        return true;
+    }
     uint32_t count = g_count();
     for (uint32_t i = 0; i < count; ++i) {
         RvkSettingInfo s;
@@ -327,6 +417,11 @@ bool RendererOnSetDValue(const char* name, const AOVariant& value)
         if (s.type == kBool) setting = setting != 0.0f ? 1.0f : 0.0f;
         g_set(name, setting);
         Log("[renderer] %s = %g", name, setting);
+        if (g_presetCount) {                    // a change by hand: the preset buttons follow (Custom)
+            g_syncing = true;
+            GameAPI::SetInt(kPresetVar, CurrentPreset());
+            g_syncing = false;
+        }
         return true;
     }
     return false;
