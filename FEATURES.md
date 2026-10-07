@@ -55,7 +55,7 @@ The action timer bars (nano casting, item equip/unequip, reload, attack cooldown
 ### Frame Rate Cap
 The client normally limits itself to 100 FPS. A slider sets the limit anywhere from 30 to 500 FPS; it changes the game's own frame limiter, so it applies immediately.
 
-**Config:** Options panel (F10) → **AOReloaded** tab → **Performance** → frame rate cap (default 100, the stock value).
+**Config:** Options panel (F10) → **Renderer** tab → **Frame rate**, at the top, when the ao-vk renderer is installed; otherwise **AOReloaded** tab → **Performance**. Default 100, the stock value; saved in `AOReloaded.ini` either way.
 
 ### Ctrl+Click Item Moves (Backpacks)
 - **Ctrl+click** an item in your main inventory to move it into the backpack you opened last.

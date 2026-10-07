@@ -5,6 +5,7 @@
 #include "ao/game_api.h"
 #include "core/logging.h"
 #include "core/settings.h"
+#include "core/fps_cap.h"
 
 #include <windows.h>
 #include <cmath>
@@ -158,6 +159,14 @@ void AppendHeading(char*& out, char* end, const char* text, int top)
     Append(out, end, attrs);
 }
 
+// The frame rate cap (AOReloaded's own AOR_FpsCap, fps_cap.cpp) first: it belongs with the renderer's settings,
+// not in the AOReloaded tab, which leaves it out when this tab is there.
+void AppendFrameRate(char*& out, char* end)
+{
+    AppendHeading(out, end, "Frame rate", 0);
+    Append(out, end, kFpsCapSliderXml);
+}
+
 // Version 2 layout: every on / off option at the top (by section, a feature's own options indented under it), then
 // the values (sliders, choices) in blocks headed by their feature.
 void BuildXml()
@@ -174,6 +183,7 @@ void BuildXml()
            "        <TextView value=\"randy-vk renderer\" layout_borders=\"Rect(0,0,0,5)\" />\n"
            "        <TextView value=\"Changes apply at once. Settings are saved to randy-vk.ini.\""
            " layout_borders=\"Rect(0,0,0,10)\" />\n");
+    AppendFrameRate(out, end);
     uint32_t count = g_count();
     std::vector<RvkSettingInfo> all;
     for (uint32_t i = 0; i < count; ++i) {
@@ -188,7 +198,7 @@ void BuildXml()
     };
 
     // Options: the switches.
-    AppendHeading(out, end, "Options", 0);
+    AppendHeading(out, end, "Options", 16);
     const char* section = "";
     for (const RvkSettingInfo& s : all) {
         if (s.type != kBool || s.parent) continue;
@@ -243,6 +253,7 @@ void BuildXmlV1()
            "        <TextView value=\"randy-vk renderer\" layout_borders=\"Rect(0,0,0,5)\" />\n"
            "        <TextView value=\"Changes apply at once. Settings are saved to randy-vk.ini.\""
            " layout_borders=\"Rect(0,0,0,10)\" />\n");
+    AppendFrameRate(out, end);
     const char* section = "";
     uint32_t count = g_count();
     for (uint32_t i = 0; i < count; ++i) {

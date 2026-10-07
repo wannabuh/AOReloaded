@@ -18,4 +18,9 @@ namespace aor {
 // Returns true if the cap could be located.
 bool InitFpsCap();
 
+// The AOR_FpsCap slider (an OptionSlider element) for an options tab: the
+// Renderer tab's first value when a randy-vk renderer is loaded, otherwise
+// the AOReloaded tab's Performance section.
+extern const char kFpsCapSliderXml[];
+
 }  // namespace aor

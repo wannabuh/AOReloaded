@@ -14,6 +14,7 @@
 
 #include "core/settings.h"
 #include "core/renderer_settings.h"
+#include "core/fps_cap.h"
 #include "core/logging.h"
 #include "ao/game_api.h"
 #include "ao/types.h"
@@ -332,7 +333,7 @@ static bool BuildIniPathNarrow(char* out, int outSize) {
 // the settings table so new settings only need to be added in one place
 // (the table for persistence, and the XML for UI).
 
-static const char kAorXmlBlock[] =
+static const char kAorXmlHead[] =
     "\n"
     "  <ScrollView h_alignment=\"LEFT\" label=\"AOReloaded\" v_scrollbar_mode=\"auto\""
     " scroll_client=\"aor_scroll\" max_size=\"Point(16000,-1)\">\n"
@@ -385,11 +386,14 @@ static const char kAorXmlBlock[] =
     " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_SkillFavs\"/>\n"
     "        <OptionCheckBox label=\"Shift+click on a skill's + or - changes it by 5\""
     " layout_borders=\"Rect(10,0,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_SkillShift\"/>\n"
-    "\n"
-    "        <TextView value=\"Performance\" layout_borders=\"Rect(0,10,0,3)\" />\n"
-    "        <OptionSlider label=\"Maximum frame rate (default: 100):\""
-    " layout_borders=\"Rect(10,0,0,3)\" opt_type=\"variant\" opt_variable=\"AOR_FpsCap\""
-    " value_fmt=\"&lt;font color=#70C4D0&gt;%.0f&lt;/font&gt;\" value_scale=\"1\"/>\n"
+    "\n";
+
+// The Performance section: only without a Renderer tab, which shows the
+// frame rate slider first instead (renderer_settings.cpp).
+static const char kAorXmlPerformance[] =
+    "        <TextView value=\"Performance\" layout_borders=\"Rect(0,10,0,3)\" />\n";
+
+static const char kAorXmlTail[] =
     "\n"
     "        <TextView value=\"Debug\" layout_borders=\"Rect(0,10,0,3)\" />\n"
     "        <OptionCheckBox label=\"Enable debug logging (AOReloaded.log, requires restart)\""
@@ -426,6 +430,21 @@ static bool GetClientDir(char* out, int outSize) {
     return true;
 }
 
+// The AOReloaded tab's XML: its sections, with Performance (the frame rate
+// slider) only when there's no Renderer tab to show it.
+static const char* AorXmlBlock() {
+    constexpr size_t kSliderRoom = 512;         // kFpsCapSliderXml (fps_cap.cpp) is ~250 bytes
+    static char block[sizeof(kAorXmlHead) + sizeof(kAorXmlPerformance) + kSliderRoom + sizeof(kAorXmlTail)];
+    block[0] = '\0';
+    std::strcat(block, kAorXmlHead);
+    if (!RendererXmlBlock() && std::strlen(kFpsCapSliderXml) < kSliderRoom) {
+        std::strcat(block, kAorXmlPerformance);
+        std::strcat(block, kFpsCapSliderXml);
+    }
+    std::strcat(block, kAorXmlTail);
+    return block;
+}
+
 // Inject the AOReloaded block into a single Root.xml file if missing.
 static void PatchSingleRootXml(const char* xmlPath) {
     HANDLE hFile = CreateFileA(xmlPath, GENERIC_READ, FILE_SHARE_READ,
@@ -438,7 +457,8 @@ static void PatchSingleRootXml(const char* xmlPath) {
         return;
     }
 
-    auto* buf = new(std::nothrow) char[fileSize + sizeof(kAorXmlBlock) + 1];
+    const char* aorBlock = AorXmlBlock();
+    auto* buf = new(std::nothrow) char[fileSize + 1];
     if (!buf) { CloseHandle(hFile); return; }
 
     DWORD bytesRead = 0;
@@ -482,7 +502,7 @@ static void PatchSingleRootXml(const char* xmlPath) {
     }
 
     size_t prefixLen = static_cast<size_t>(endTag - buf);
-    size_t blockLen = std::strlen(kAorXmlBlock);
+    size_t blockLen = std::strlen(aorBlock);
     // The renderer's tab, if a randy-vk renderer with a settings interface is loaded.
     const char* rendererBlock = RendererXmlBlock();
     size_t rendererLen = rendererBlock ? std::strlen(rendererBlock) : 0;
@@ -492,7 +512,7 @@ static void PatchSingleRootXml(const char* xmlPath) {
     if (!newBuf) { delete[] buf; return; }
 
     std::memcpy(newBuf, buf, prefixLen);
-    std::memcpy(newBuf + prefixLen, kAorXmlBlock, blockLen);
+    std::memcpy(newBuf + prefixLen, aorBlock, blockLen);
     if (rendererLen)
         std::memcpy(newBuf + prefixLen + blockLen, rendererBlock, rendererLen);
     std::memcpy(newBuf + prefixLen + blockLen + rendererLen, endTag, suffixLen);

@@ -45,6 +45,11 @@ static void OnSettingChanged(const char* name, int newValue) {
         ApplyFpsCap(newValue);
 }
 
+const char kFpsCapSliderXml[] =
+    "        <OptionSlider label=\"Maximum frame rate (default: 100):\""
+    " layout_borders=\"Rect(10,0,0,3)\" opt_type=\"variant\" opt_variable=\"AOR_FpsCap\""
+    " value_fmt=\"&lt;font color=#70C4D0&gt;%.0f&lt;/font&gt;\" value_scale=\"1\"/>\n";
+
 bool InitFpsCap() {
     HMODULE afcm = GetModuleHandleA("AFCM.dll");
     if (!afcm) {
