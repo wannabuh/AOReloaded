@@ -66,6 +66,7 @@ static SettingDef g_settings[] = {
     // stock maximums (view_distance.cpp). 0 = never changed.
     { "AOR_CharDist",  SettingType::Int,   0,       0,      0,  300 },
     { "AOR_GroundHQ",  SettingType::Int,   0,       0,      0,  150 },
+    { "AOR_ObjDist",   SettingType::Int, 100,     100,    100,  400 },
 };
 
 static constexpr int kSettingCount = sizeof(g_settings) / sizeof(g_settings[0]);
@@ -391,6 +392,11 @@ static const char kAorXmlHead[] =
     " value_fmt=\"&lt;font color=#70C4D0&gt;%.0f&lt;/font&gt;\" value_scale=\"1\"/>\n"
     "        <OptionCheckBox label=\"Enable cast bar preview & drag (stack extends downwards from the topmost bar)\""
     " layout_borders=\"Rect(10,5,0,0)\" opt_type=\"variant\" opt_variable=\"AOR_TBarPrev\"/>\n"
+    "\n"
+    "        <TextView value=\"View distance\" layout_borders=\"Rect(0,10,0,3)\" />\n"
+    "        <OptionSlider label=\"Object detail distance, % of the stock distances (applies from the next zone):\""
+    " layout_borders=\"Rect(10,0,0,3)\" opt_type=\"variant\" opt_variable=\"AOR_ObjDist\""
+    " value_fmt=\"&lt;font color=#70C4D0&gt;%.0f%%&lt;/font&gt;\" value_scale=\"1\"/>\n"
     "\n"
     "        <TextView value=\"Input\" layout_borders=\"Rect(0,10,0,3)\" />\n"
     "        <OptionCheckBox label=\"Numpad keys type in chat fix\""

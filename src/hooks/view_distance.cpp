@@ -14,6 +14,8 @@
 //     share the low-resolution one - the visible ring in the distance.
 //   - Past 44 the ground corrupts the heap (crash, 2026-10-09): see
 //     PatchGroundIndexOffsets.
+//   - Outdoors, placed objects (statels: buildings' props, lamps, crates...)
+//     come and go with distance in N3's statel grid: see PatchStatelRings.
 //
 // So: raise both registry maximums, jump over N3's upper clamp, fix the
 // ground's index offsets, and keep the
@@ -38,6 +40,7 @@ constexpr char kCharVar[]   = "DisplayCharViewDistance";
 constexpr char kGroundVar[] = "DisplayGroundFullQualityRadius";
 constexpr char kCharSetting[]   = "AOR_CharDist";
 constexpr char kGroundSetting[] = "AOR_GroundHQ";
+constexpr char kObjSetting[]    = "AOR_ObjDist";
 
 // Stock minimums (LoginPrefs.xml); maximums raised from 80 and 44.
 constexpr int kCharMin = 5, kCharMax = 300;
@@ -66,6 +69,23 @@ constexpr uint8_t kClampPatched[]  = {0xEB, 0x0B, 0x90, 0x90, 0x90, 0x90};
 // becomes a jmp to a stub doing "and dword ptr [ebp-0x40], 0" first.
 constexpr uint32_t kNextBufferRva = 0x347c5;
 constexpr uint8_t kNextBufferOriginal[] = {0x2B, 0x8E, 0xAC, 0x05, 0x00, 0x00};
+
+// N3.dll statel grid (built per playfield, FUN_10028ebd): the
+// playfield is split into cells, each holding its statels in six size
+// classes. FUN_10028ab7 puts a cell in a ring by the distance from the camera
+// to its centre, against 0.5 x the camera's view cone length (ViewDistance x
+// 1000, so ~500 m) x five factors (min 40 m each): 0.1, 0.15, 0.3, 0.4, 0.55
+// -> 50 / 75 / 150 / 200 / 275 m. FUN_100286a9 shows fewer of the classes the
+// further out the ring (small things only within 50-75 m) - the pop-in the
+// pop-in log found at 50-100 m in Newland City. The grid copies the factors
+// into +0x2c..+0x3c from shared constants (also used elsewhere), so the five
+// fld [constant] there are pointed at our own, scaled factors instead. Read
+// when a playfield's grid is built: changes apply from the next zone.
+constexpr uint32_t kRingLoadRvas[5] = {0x28f92, 0x28f9b, 0x28fa4, 0x28fad, 0x28fb6};
+constexpr uint32_t kRingConstRvas[5] = {0x3d61c, 0x3e674, 0x3e29c, 0x3e670, 0x3e66c};
+constexpr float kRingFactors[5] = {0.1f, 0.15f, 0.3f, 0.4f, 0.55f};
+constexpr int kObjMin = 100, kObjMax = 400;      // AOR_ObjDist, percent of the stock rings
+float g_rings[5] = {0.1f, 0.15f, 0.3f, 0.4f, 0.55f};
 
 constexpr uint32_t kCameraCharDistance = 0x174;   // n3Camera_t, float metres
 
@@ -172,6 +192,44 @@ bool PatchGroundIndexOffsets(HMODULE ds) {
     return true;
 }
 
+bool PatchStatelRings(HMODULE n3) {
+    auto* base = reinterpret_cast<uint8_t*>(n3);
+    for (int i = 0; i < 5; ++i) {                    // check all five before touching any
+        const uint8_t* at = base + kRingLoadRvas[i];
+        const uint32_t constant = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(base) + kRingConstRvas[i]);
+        const uint32_t ours = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_rings[i]));
+        uint32_t operand;
+        std::memcpy(&operand, at + 2, 4);
+        if (at[0] != 0xD9 || at[1] != 0x05 || (operand != constant && operand != ours)) {
+            Log("[viewdist] N3 statel ring loads differ (%02X %02X %08X) - not patched, objects keep the stock distances",
+                at[0], at[1], operand);
+            return false;
+        }
+    }
+    for (int i = 0; i < 5; ++i) {
+        uint8_t* at = base + kRingLoadRvas[i] + 2;
+        const uint32_t ours = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&g_rings[i]));
+        DWORD old = 0;
+        if (!VirtualProtect(at, 4, PAGE_EXECUTE_READWRITE, &old)) return false;
+        std::memcpy(at, &ours, 4);
+        VirtualProtect(at, 4, old, &old);
+    }
+    FlushInstructionCache(GetCurrentProcess(), base + kRingLoadRvas[0], kRingLoadRvas[4] + 6 - kRingLoadRvas[0]);
+    return true;
+}
+
+void SetStatelRings(int percent) {
+    if (percent < kObjMin) percent = kObjMin;
+    if (percent > kObjMax) percent = kObjMax;
+    for (int i = 0; i < 5; ++i) g_rings[i] = kRingFactors[i] * static_cast<float>(percent) / 100.0f;
+    Log("[viewdist] statel rings at %d%%: %.0f / %.0f / %.0f / %.0f / %.0f m (from the next zone)", percent,
+        g_rings[0] * 500.0f, g_rings[1] * 500.0f, g_rings[2] * 500.0f, g_rings[3] * 500.0f, g_rings[4] * 500.0f);
+}
+
+void OnSettingChanged(const char* name, int value) {
+    if (std::strcmp(name, kObjSetting) == 0) SetStatelRings(value);
+}
+
 int GroundMax() { return g_groundPatched ? kGroundMax : kGroundStockMax; }
 
 // Put a remembered value back (within the raised slider range).
@@ -200,7 +258,10 @@ bool PatchViewDistanceCode() {
     g_getActiveCamera = reinterpret_cast<FnGetActiveCamera>(
         GetProcAddress(n3, "?GetActiveCamera@n3EngineClient_t@@QBEPAVn3Camera_t@@XZ"));
     g_clampPatched = PatchClamp(n3);
-    return g_clampPatched || g_groundPatched;
+    SetStatelRings(SettingsGetInt(kObjSetting));   // the .ini is read already; the grid isn't built yet
+    const bool rings = PatchStatelRings(n3);
+    RegisterSettingCallback(&OnSettingChanged);
+    return g_clampPatched || g_groundPatched || rings;
 }
 
 bool InitViewDistance() {
