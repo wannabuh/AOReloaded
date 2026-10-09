@@ -12,8 +12,11 @@
 //     AnarchyGround_t::SetHQRadius (n3GroundRenderer_t's slot): ground
 //     triangles within it get their own high-resolution texture, the rest
 //     share the low-resolution one - the visible ring in the distance.
+//   - Past 44 the ground corrupts the heap (crash, 2026-10-09): see
+//     PatchGroundIndexOffsets.
 //
-// So: raise both registry maximums, jump over N3's upper clamp, and keep the
+// So: raise both registry maximums, jump over N3's upper clamp, fix the
+// ground's index offsets, and keep the
 // chosen values in AOReloaded.ini. The client loads its prefs (and clamps
 // them to the stock maximums) before we can raise those, so the values are
 // set again once, on the game thread, after login.
@@ -38,7 +41,7 @@ constexpr char kGroundSetting[] = "AOR_GroundHQ";
 
 // Stock minimums (LoginPrefs.xml); maximums raised from 80 and 44.
 constexpr int kCharMin = 5, kCharMax = 300;
-constexpr int kGroundMin = 7, kGroundMax = 150;
+constexpr int kGroundMin = 7, kGroundMax = 150, kGroundStockMax = 44;
 
 // N3.dll FUN_1001f964:
 //   1001f9a6  83 7D F0 50   cmp dword ptr [ebp-0x10], 0x50
@@ -49,6 +52,21 @@ constexpr uint32_t kClampRva = 0x1f9a6;
 constexpr uint8_t kClampOriginal[] = {0x83, 0x7D, 0xF0, 0x50, 0x7E, 0x07};
 constexpr uint8_t kClampPatched[]  = {0xEB, 0x0B, 0x90, 0x90, 0x90, 0x90};
 
+// DisplaySystem.dll FUN_10034658 (AnarchyGround_t, laying the tessellated
+// ground out into pooled vertex buffers): each high-quality texture group gets
+// a range of its buffer's index array (allocated once, (capacity + 1) * 3 / 2
+// entries, FUN_100384b3) at an offset taken from [ebp-0x40]. That counter runs
+// on over every group, never going back to 0 when the layout moves on to the
+// next buffer, so later buffers are written past the end of their arrays once
+// there are enough high-quality triangles - never at the stock radius of 44.
+// The draw (FUN_100385b3) reads each group's indices from its own buffer's
+// array at that offset, so restarting the counter for every buffer is right.
+// Every move to the next buffer goes through 100347c5 (the only jump into it):
+//   100347c5  2B 8E AC 05 00 00   sub ecx, [esi+0x5ac]
+// becomes a jmp to a stub doing "and dword ptr [ebp-0x40], 0" first.
+constexpr uint32_t kNextBufferRva = 0x347c5;
+constexpr uint8_t kNextBufferOriginal[] = {0x2B, 0x8E, 0xAC, 0x05, 0x00, 0x00};
+
 constexpr uint32_t kCameraCharDistance = 0x174;   // n3Camera_t, float metres
 
 using FnGetEngineInstance = void*(__cdecl*)();
@@ -57,6 +75,7 @@ FnGetEngineInstance g_getEngine = nullptr;
 FnGetActiveCamera   g_getActiveCamera = nullptr;
 
 bool g_clampPatched = false;
+bool g_groundPatched = false;
 volatile bool g_reapplyPending = false;
 
 // A heap-mode AOString over a static name (> 15 chars); SetDValue and
@@ -121,6 +140,40 @@ bool PatchClamp(HMODULE n3) {
     return true;
 }
 
+bool PatchGroundIndexOffsets(HMODULE ds) {
+    auto* at = reinterpret_cast<uint8_t*>(ds) + kNextBufferRva;
+    if (at[0] == 0xE9) return true;                  // already ours
+    if (std::memcmp(at, kNextBufferOriginal, sizeof(kNextBufferOriginal)) != 0) {
+        Log("[viewdist] DisplaySystem ground layout bytes differ (%02X %02X %02X) - not patched, ground stays at <= 44",
+            at[0], at[1], at[2]);
+        return false;
+    }
+    auto* stub = static_cast<uint8_t*>(VirtualAlloc(nullptr, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    if (!stub) return false;
+    const uint8_t* back = at + sizeof(kNextBufferOriginal);
+    uint8_t code[] = {
+        0x83, 0x65, 0xC0, 0x00,                      // and dword ptr [ebp-0x40], 0
+        0x2B, 0x8E, 0xAC, 0x05, 0x00, 0x00,          // sub ecx, [esi+0x5ac]   (the original)
+        0xE9, 0, 0, 0, 0,                            // jmp 100347cb
+    };
+    const int32_t backRel = static_cast<int32_t>(back - (stub + sizeof(code)));
+    std::memcpy(code + 11, &backRel, 4);
+    std::memcpy(stub, code, sizeof(code));
+    FlushInstructionCache(GetCurrentProcess(), stub, sizeof(code));
+
+    uint8_t jump[6] = {0xE9, 0, 0, 0, 0, 0x90};      // jmp stub; nop
+    const int32_t rel = static_cast<int32_t>(stub - (at + 5));
+    std::memcpy(jump + 1, &rel, 4);
+    DWORD old = 0;
+    if (!VirtualProtect(at, sizeof(jump), PAGE_EXECUTE_READWRITE, &old)) return false;
+    std::memcpy(at, jump, sizeof(jump));
+    VirtualProtect(at, sizeof(jump), old, &old);
+    FlushInstructionCache(GetCurrentProcess(), at, sizeof(jump));
+    return true;
+}
+
+int GroundMax() { return g_groundPatched ? kGroundMax : kGroundStockMax; }
+
 // Put a remembered value back (within the raised slider range).
 void Reapply(const char* var, const char* setting, int lo, int hi) {
     int wanted = SettingsGetInt(setting);
@@ -135,22 +188,24 @@ void Reapply(const char* var, const char* setting, int lo, int hi) {
 
 }  // namespace
 
-bool PatchViewDistanceClamp() {
+bool PatchViewDistanceCode() {
+    HMODULE ds = GetModuleHandleA("DisplaySystem.dll");
+    g_groundPatched = ds && PatchGroundIndexOffsets(ds);
     HMODULE n3 = GetModuleHandleA("N3.dll");
     if (!n3) {
         Log("[viewdist] N3.dll not loaded");
-        return false;
+        return g_groundPatched;
     }
     g_getEngine = reinterpret_cast<FnGetEngineInstance>(GetProcAddress(n3, "?GetInstance@n3EngineClient_t@@SAPAV1@XZ"));
     g_getActiveCamera = reinterpret_cast<FnGetActiveCamera>(
         GetProcAddress(n3, "?GetActiveCamera@n3EngineClient_t@@QBEPAVn3Camera_t@@XZ"));
     g_clampPatched = PatchClamp(n3);
-    return g_clampPatched;
+    return g_clampPatched || g_groundPatched;
 }
 
 bool InitViewDistance() {
     const bool charRange = g_clampPatched && SetDValueMinMax(kCharVar, kCharMin, kCharMax);
-    const bool groundRange = SetDValueMinMax(kGroundVar, kGroundMin, kGroundMax);
+    const bool groundRange = g_groundPatched && SetDValueMinMax(kGroundVar, kGroundMin, kGroundMax);
     Log("[viewdist] character distance up to %d m: %s, ground full quality up to %d: %s", kCharMax,
         charRange ? "yes" : "no", kGroundMax, groundRange ? "yes" : "no");
     g_reapplyPending = true;
@@ -161,7 +216,7 @@ void ViewDistanceTick() {
     if (!g_reapplyPending) return;
     g_reapplyPending = false;
     Reapply(kCharVar, kCharSetting, kCharMin, kCharMax);
-    Reapply(kGroundVar, kGroundSetting, kGroundMin, kGroundMax);
+    Reapply(kGroundVar, kGroundSetting, kGroundMin, GroundMax());
     int metres = 0;
     if (GetInt(kCharVar, metres)) SetCameraCharDistance(metres);
 }

@@ -12,9 +12,10 @@
 
 namespace aor {
 
-// Patch N3's 80 m clamp. Call early, before the game world (and its camera)
-// exists, so the game thread can't be running that code.
-bool PatchViewDistanceClamp();
+// Patch N3's 80 m clamp and DisplaySystem's ground index offsets (which
+// overflow past the stock radius). Call early, before the game world exists,
+// so the game thread can't be running that code.
+bool PatchViewDistanceCode();
 
 // Raise the slider maximums. Call once the game world is up (the DValues
 // exist) and after SettingsInstallHook().

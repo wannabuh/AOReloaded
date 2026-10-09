@@ -109,10 +109,11 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
         aor::Log("[init] skill favorites failed — skills window unchanged");
     }
 
-    // N3.dll loads with the exe (GUI.dll and Interfaces.dll import it); patch its character distance
-    // clamp before the camera that runs it exists.
-    if (!aor::PatchViewDistanceClamp()) {
-        aor::Log("[init] view distance clamp not patched — characters stay at <= 80 m");
+    // N3.dll and DisplaySystem.dll load with the exe (through GUI.dll and
+    // Interfaces.dll); patch N3's character distance clamp and the ground's
+    // index offsets before the world that runs them exists.
+    if (!aor::PatchViewDistanceCode()) {
+        aor::Log("[init] view distance code not patched — stock slider limits stay");
     }
 
     // Wait for game world. 
