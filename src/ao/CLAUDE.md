@@ -84,6 +84,13 @@ The global registry is an `std::map<String, ValueEntry>` backed by a red-black t
 | `?ForcedUpdate@CameraVehicleFixedThird_t@@UAEX_N@Z` | Virtual; copies position from `+0x58` to `+0xdc`, calls `UpdateHeadingToPos`, then virtual `+0x98`. |
 | `?SetRelRot@n3Dynel_t@@QAEXABVQuaternion_t@@@Z` | Writes body rotation (forwards to `Vehicle_t::SetRelRot` on `dynel+0x50`). For the unparented local player, rel == global rot. Used by RMB-align to snap character facing to camera look direction. **Has a synchronous side effect** that recomputes camera targeting from `vehicle+0x1F8` × `vehicle+0x16C` — callers snapping both must write the new heading BEFORE invoking this, or the cascade renders one frame of a stale-heading × new-quat position. |
 
+### View distances (RE 2026-10-09, `hooks/view_distance.cpp`)
+
+- `n3EngineClient_t::GetActiveCamera` = `mov eax,[ecx+0x7c]; ret`. `n3Camera_t +0x174` (float, metres): character view distance; `n3VisualDynel_t::Run` hides characters on ground playfields beyond it (hard cut).
+- `FUN_1001f964` (RVA `0x1f964`) copies the `DisplayCharViewDistance` DValue (member at `n3Camera_t +0xb0`) to `+0x174`, replacing values < 5 or > 80 with 70: `0x1f9a6 83 7D F0 50 7E 07` (cmp/jle) is patched to `EB 0B 90 90 90 90`.
+- `n3GroundRenderer_t::SlotGroundFQRadiusChanged` passes `DisplayGroundFullQualityRadius` straight to `AnarchyGround_t::SetHQRadius` + `Tesselate` (re-tessellates: game thread only).
+- `DistributedValue_c::SetDValue` (Utils.dll `0x25a7`) clamps to the node's min/max (+0x61/+0x62, +0x68/+0x78) before emitting the change signals, on the caller's thread. Stock ranges come from `cd_image/gui/Default/LoginPrefs.xml`.
+
 ## Gamecode.dll — Movement dispatcher
 
 ### `n3EngineClientAnarchy_t::N3Msg_MovementChanged(MovementAction_e, float, float, bool)`

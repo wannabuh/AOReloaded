@@ -19,6 +19,7 @@
 #include "ao/game_api.h"
 #include "ao/types.h"
 #include "hooks/hook_engine.h"
+#include "hooks/view_distance.h"
 
 #include <windows.h>
 #include <cstdint>
@@ -61,6 +62,10 @@ static SettingDef g_settings[] = {
     { "AOR_InvPins",   SettingType::Bool,  1,       1,      0,    1 },
     { "AOR_SkillFavs", SettingType::Bool,  1,       1,      0,    1 },
     { "AOR_SkillShift", SettingType::Bool, 1,       1,      0,    1 },
+    // No widget of their own: the stock view distance sliders, past their
+    // stock maximums (view_distance.cpp). 0 = never changed.
+    { "AOR_CharDist",  SettingType::Int,   0,       0,      0,  300 },
+    { "AOR_GroundHQ",  SettingType::Int,   0,       0,      0,  150 },
 };
 
 static constexpr int kSettingCount = sizeof(g_settings) / sizeof(g_settings[0]);
@@ -240,6 +245,19 @@ static SettingDef* FindSetting(const char* name) {
     return nullptr;
 }
 
+int SettingsGetInt(const char* name) {
+    const SettingDef* def = FindSetting(name);
+    return def ? def->current : 0;
+}
+
+void SettingsSetInt(const char* name, int value) {
+    SettingDef* def = FindSetting(name);
+    if (!def || def->current == value) return;
+    def->current = value;
+    WriteIniInt(def->name, value);
+    Log("[settings] persisted %s = %d", def->name, value);
+}
+
 // ── SetDValue hook ─────────────────────────────────────────────────────
 //
 // Detours the game's static SetDValue to intercept writes to our settings.
@@ -257,6 +275,7 @@ static void __cdecl SetDValueDetour(const AOString& name, const AOVariant& value
     const char* str = name.c_str();
     if (RendererOnSetDValue(str, value))
         return;
+    ViewDistanceOnSetDValue(str, value);
     if (str[0] != 'A' || str[1] != 'O' || str[2] != 'R' || str[3] != '_')
         return;
 

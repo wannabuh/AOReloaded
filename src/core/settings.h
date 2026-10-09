@@ -56,6 +56,12 @@ using SettingChangedCallback = void(*)(const char* name, int newValue);
 // Give an Int DValue the min/max an OptionSlider needs (also used for the renderer settings tab).
 bool SetDValueMinMax(const char* name, int minVal, int maxVal);
 
+// A setting's current value (0 if there's no such setting), and setting it
+// from code: saved to the .ini, without the change callbacks. For settings
+// with no widget of their own (AOR_CharDist, AOR_GroundHQ).
+int SettingsGetInt(const char* name);
+void SettingsSetInt(const char* name, int value);
+
 // Register a callback.  Up to 4 callbacks supported.
 void RegisterSettingCallback(SettingChangedCallback cb);
 

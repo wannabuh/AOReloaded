@@ -11,6 +11,7 @@
 #include "hooks/camera_hook.h"
 #include "hooks/input_handler.h"
 #include "hooks/hook_engine.h"
+#include "hooks/view_distance.h"
 #include "ao/game_api.h"
 #include "core/logging.h"
 
@@ -98,6 +99,8 @@ static bool  g_hasLastPos  = false;
 static bool  g_rmbWasHeld  = false;
 
 static int __fastcall CalcSteeringDetour(void* vehicle, void* /*edx*/, void* result) {
+    ViewDistanceTick();   // not camera behaviour: just the per-frame call on the game thread it needs
+
     void* engine = N3API::GetEngineInstance ? N3API::GetEngineInstance() : nullptr;
     if (!engine) goto call_original;
 

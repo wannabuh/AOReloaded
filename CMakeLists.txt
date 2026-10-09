@@ -48,6 +48,7 @@ add_library(AOReloaded SHARED
     src/hooks/alt_select.cpp
     src/hooks/inventory_pins.cpp
     src/hooks/skill_favorites.cpp
+    src/hooks/view_distance.cpp
 )
 
 set_target_properties(AOReloaded PROPERTIES

@@ -80,6 +80,13 @@ With [ao-vk](https://github.com/wannabuh/ao-vk) installed (a Vulkan replacement 
 
 **Config:** none - present whenever ao-vk is installed.
 
+### Longer Character View Distance and Full-Quality Ground
+The stock options stop at 80 m for characters and 44 for the ground's full-quality radius. Beyond 80 m other players and NPCs simply vanish, even when the scenery behind them is still clear, and past the full-quality radius the ground switches to a blurry low-resolution texture with a sharp edge (very visible with anisotropic filtering). AOReloaded raises the limits of the game's own sliders: characters up to 300 m, ground full quality up to 150. Your values are kept in `AOReloaded.ini` (`AOR_CharDist`, `AOR_GroundHQ`) and set again after each login.
+
+Note: the server only sends you characters within a certain range, so very high character distances may show no further difference. A larger ground radius costs some CPU while you move and more texture memory.
+
+**Config:** Options panel (F10) → stock display settings → "Character view distance" and "Ground full quality" sliders.
+
 <!-- 
 Template for adding features:
 

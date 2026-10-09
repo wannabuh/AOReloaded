@@ -26,6 +26,7 @@
 #include "hooks/alt_select.h"
 #include "hooks/inventory_pins.h"
 #include "hooks/skill_favorites.h"
+#include "hooks/view_distance.h"
 
 #include <windows.h>
 
@@ -108,6 +109,12 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
         aor::Log("[init] skill favorites failed — skills window unchanged");
     }
 
+    // N3.dll loads with the exe (GUI.dll and Interfaces.dll import it); patch its character distance
+    // clamp before the camera that runs it exists.
+    if (!aor::PatchViewDistanceClamp()) {
+        aor::Log("[init] view distance clamp not patched — characters stay at <= 80 m");
+    }
+
     // Wait for game world. 
     aor::Log("[init] waiting for game world...");
     while (!aor::GameAPI::Exists("camera_mode")) {
@@ -120,6 +127,14 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     // (after game world init) to avoid intercepting the hundreds of
     // SetDValue calls the game makes during its own startup.
     aor::SettingsInstallHook();
+
+    // Character view distance and full-quality ground past the stock slider
+    // maximums. Needs the SetDValue hook (to remember slider changes); the
+    // saved values are put back from the camera hook, on the game thread.
+    // The registry slider limits: set now that the DValues exist.
+    if (!aor::InitViewDistance()) {
+        aor::Log("[init] view distance failed — stock slider limits stay");
+    }
 
     // Install input handler hooks (GUI.dll callbacks + movement filter).
     if (!aor::InitInputHandler()) {
