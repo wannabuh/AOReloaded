@@ -15,6 +15,7 @@
 
 #include "core/logging.h"
 #include "core/laa_patch.h"
+#include "core/gui_overlay.h"
 #include "core/settings.h"
 #include "core/fps_cap.h"
 #include "ao/game_api.h"
@@ -51,6 +52,14 @@ bool IsAnarchyOnlineProcess() {
 DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     aor::Log("[init] deferred init thread started");
 
+    // Serve the AOReloaded/Renderer tabs (OptionPanel/Root.xml) and the
+    // skills Favorites group (Views/Skills.xml) from memory instead of
+    // writing the game's XML on disk, so deleting version.dll really
+    // uninstalls. Hook the file opens first, then register the patchers.
+    aor::overlay::Init();
+    aor::RegisterRootXmlOverlay();
+    aor::RegisterSkillsXmlOverlay();
+
     // Wait for Utils.dll to appear. The game loads it during startup.
     // Timeout after 30 seconds to avoid hanging forever on broken installs.
     for (int i = 0; i < 300; ++i) {
@@ -62,6 +71,10 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
         aor::Log("[init] Utils.dll never loaded — aborting init");
         return 1;
     }
+
+    // Re-scan for modules loaded since the first pass so their file opens
+    // are hooked too.
+    aor::overlay::Init();
 
     aor::Log("[init] Utils.dll detected, resolving game API...");
     if (!aor::GameAPI::Init()) {
@@ -75,10 +88,11 @@ DWORD WINAPI DeferredInit(LPVOID /*param*/) {
     aor::SettingsInit();
     aor::SettingsRegisterAll();
 
-    // Ensure the AOReloaded tab exists in the options panel XML.
-    // Must happen before the game parses Root.xml (during world load).
-    aor::PatchOptionsXml();
-    aor::PatchSkillsXml();
+    // Older builds wrote the tabs/favorites into the GUI XML on disk; strip
+    // them now so deleting version.dll restores the stock GUI. The in-memory
+    // overlay keeps serving the current version from here on.
+    aor::CleanRootXmlOnDisk();
+    aor::CleanSkillsXmlOnDisk();
 
     // Apply the frame rate cap now so it also covers the login screens.
     // The slider callback only fires once SettingsInstallHook() is in.

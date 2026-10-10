@@ -34,6 +34,8 @@ add_library(AOReloaded SHARED
     src/proxy/version_proxy.def
     src/core/logging.cpp
     src/core/laa_patch.cpp
+    src/core/win_iat.cpp
+    src/core/gui_overlay.cpp
     src/core/settings.cpp
     src/core/renderer_settings.cpp
     src/core/fps_cap.cpp

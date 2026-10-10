@@ -26,7 +26,32 @@ Everything is configurable in the **AOReloaded** tab (F10), and each feature can
 2. Drop it into the same folder as `AnarchyOnline.exe` (should be `[game root]\client\`).
 3. Launch the game normally.
 
-To uninstall, delete `version.dll` from the client folder.
+To uninstall, delete `version.dll` from the client folder. The options tab and the skills window's Favorites group are served from memory while the mod is loaded, so nothing is written into the game's GUI files and no leftover GUI remains. (Builds up to 2026-10 wrote those edits to `OptionPanel/Root.xml` and `Views/Skills.xml` on disk; the first launch of this build restores the stock files automatically.)
+
+#### Removing a leftover custom GUI (older versions)
+
+Versions before 2026-10 wrote the **AOReloaded**/**Renderer** options tabs and the skills window's **Favorites** group directly into the game's GUI XML. Deleting `version.dll` did not remove them, so those files can still carry the edits.
+
+**Easiest:** update `version.dll` to the current build, launch the game once (the login screen is enough), quit it, then delete `version.dll`. The startup repair strips the blocks back out of every file it finds.
+
+**Manual:** if you already deleted `version.dll` or would rather not reinstall it, close the game and delete the blocks yourself with a text editor. (The current build serves the tabs from memory while it is loaded, so edits made while `version.dll` is still present will be re-applied on the next launch — remove `version.dll` first, or just use the easiest route above.)
+
+These edits can be in any of:
+
+- `[client]\cd_image\gui\Default\OptionPanel\Root.xml`
+- `[client]\cd_image\gui\Default\Views\Skills.xml`
+- the same two files inside any other GUI folder under `[client]\cd_image\gui\`
+- the same two files inside a custom GUI under `%LocalAppData%\Funcom\Anarchy Online\<hash>\<account>\Gui\<GUI>\`
+
+In each `Root.xml`, remove the two `<ScrollView>` blocks whose opening tag contains `label="AOReloaded"` and `label="Renderer"`. They are the last two blocks before `</root>`; delete from the `<ScrollView ...>` line through its matching `</ScrollView>` line (the block contains no nested `ScrollView`, so the next `</ScrollView>` is the end). Leave everything else untouched.
+
+In each `Skills.xml`, remove these three pieces:
+
+- the line `<Button name="favorites" label="Favorites" ... width_group_owner="parent"/>`
+- the `<BorderView ... name="favorites_view" ...>` … `</BorderView>` pair that follows it
+- the `<View ... name="favorites_group" ...>` … `</View>` pair near the end of the group `ViewSelector`
+
+The `AOReloaded.ini`, `AOReloadedSkills.ini`, `AOReloadedPins.ini` and `AOReloaded.log` files in the client folder are harmless and can be kept or deleted; they do not affect the GUI.
 
 #### Linux
 

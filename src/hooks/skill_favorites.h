@@ -36,9 +36,12 @@
 
 namespace aor {
 
-// Add the favorites views to every Skills.xml (idempotent). Call before the
-// skills window is first opened, e.g. next to PatchOptionsXml().
-void PatchSkillsXml();
+// Register the in-memory Views/Skills.xml overlay (serves the favorites
+// views without writing the file) and, once, strip any fragments older
+// builds wrote to disk. Call before the skills window is first opened, e.g.
+// next to RegisterRootXmlOverlay().
+void RegisterSkillsXmlOverlay();
+void CleanSkillsXmlOnDisk();
 
 // Install the hooks. GUI.dll is a static import of the exe.
 // Returns false (and installs nothing) if the client doesn't match.

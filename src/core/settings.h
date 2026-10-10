@@ -11,7 +11,8 @@
 //   0. IsDebugLogEnabled()   — reads .ini BEFORE LogInit (no game DLLs needed)
 //   1. SettingsInit()         — resolve .ini path, load persisted values
 //   2. SettingsRegisterAll()  — register DValues with loaded (or default) values
-//   2b. PatchOptionsXml()    — inject AOReloaded tab into Root.xml if missing
+//   2b. RegisterRootXmlOverlay() — serve the AOReloaded tab from memory
+//       (CleanRootXmlOnDisk() repairs files older builds edited)
 //   3. SettingsInstallHook()  — detour SetDValue for change persistence
 //                               (call after game world is up, so we don't
 //                               spam the .ini during the game's own init)
@@ -31,10 +32,12 @@ void SettingsInit();
 // using the value loaded from .ini (or the compiled-in default).
 void SettingsRegisterAll();
 
-// Step 2b: Ensure the AOReloaded tab exists in OptionPanel/Root.xml.
-// Reads the file, checks for our ScrollView, injects it if missing.
-// Must be called BEFORE the game parses the XML (i.e. before game world).
-void PatchOptionsXml();
+// Step 2b: register the OptionPanel/Root.xml in-memory overlay (serves the
+// AOReloaded/Renderer tabs without writing to the file) and, once, strip any
+// blocks older builds wrote to disk. Must be called before the game parses
+// the XML (i.e. before game world).
+void RegisterRootXmlOverlay();
+void CleanRootXmlOnDisk();
 
 // Call fn with the path of `relPath` (e.g. "Views\\Skills.xml") inside every
 // GUI folder: cd_image/gui/Default, the other GUIs in cd_image/gui, and the

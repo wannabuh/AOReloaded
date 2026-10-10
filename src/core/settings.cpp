@@ -13,6 +13,7 @@
 // file locking and atomic writes.
 
 #include "core/settings.h"
+#include "core/gui_overlay.h"
 #include "core/renderer_settings.h"
 #include "core/fps_cap.h"
 #include "core/logging.h"
@@ -26,6 +27,7 @@
 #include <cstdio>
 #include <cstring>
 #include <new>
+#include <string>
 
 namespace aor {
 
@@ -429,7 +431,7 @@ static const char kAorXmlTail[] =
     "    </ScrollViewChild>\n"
     "  </ScrollView>\n";
 
-// ── Multi-path Root.xml patching ───────────────────────────────────────
+// ── Root.xml overlay ───────────────────────────────────────────────────
 //
 // Custom GUIs in AO live in:
 //   %LocalAppData%\Funcom\Anarchy Online\<hash>\<sub>\Gui\<GUIName>\
@@ -437,11 +439,11 @@ static const char kAorXmlTail[] =
 // the custom GUI directory. If the custom GUI has its own
 // OptionPanel/Root.xml, that one takes precedence.
 //
-// Rather than trying to determine the active GUI name (which is stored
-// in the AppData Prefs.xml, not in MainPrefs.xml), we simply find and
-// patch EVERY OptionPanel/Root.xml that exists — both in cd_image and
-// in every AppData GUI directory. PatchSingleRootXml is safe to call on
-// any file: it skips non-existent paths and is idempotent.
+// The AOReloaded/Renderer tabs are injected in memory by the overlay
+// (gui_overlay.cpp), which matches whichever OptionPanel/Root.xml the
+// client actually opens — no need to guess the active GUI. Older builds
+// wrote the blocks into every Root.xml they could find; CleanRootXmlOnDisk
+// (via ForEachGuiFile) strips those, skipping non-existent paths.
 
 // Get the client directory (exe dir with trailing backslash).
 static bool GetClientDir(char* out, int outSize) {
@@ -470,95 +472,100 @@ static const char* AorXmlBlock() {
     return block;
 }
 
-// Inject the AOReloaded block into a single Root.xml file if missing.
-static void PatchSingleRootXml(const char* xmlPath) {
+// Remove any AOReloaded/Renderer <ScrollView> blocks. Used both to make the
+// in-memory injection idempotent and to repair files older builds edited on
+// disk. Returns true if anything was removed.
+static bool StripRootBlocks(std::string& xml) {
+    bool removed = false;
+    size_t search = 0;
+    while (true) {
+        const size_t start = xml.find("<ScrollView", search);
+        if (start == std::string::npos) break;
+
+        const size_t tagEnd = xml.find('>', start);
+        const size_t aor = xml.find("label=\"AOReloaded\"", start);
+        const size_t rvk = xml.find("label=\"Renderer\"", start);
+        const bool isOurs =
+            tagEnd != std::string::npos &&
+            ((aor != std::string::npos && aor < tagEnd + 1) ||
+             (rvk != std::string::npos && rvk < tagEnd + 1));
+        if (!isOurs) {
+            search = start + 1;
+            continue;
+        }
+
+        size_t close = xml.find("</ScrollView>", start);
+        if (close == std::string::npos) break;
+        close += 13;  // skip "</ScrollView>"
+        while (close < xml.size() && (xml[close] == '\n' || xml[close] == '\r')) ++close;
+        xml.erase(start, close - start);
+        removed = true;
+        search = start;  // the other block may directly follow
+    }
+    return removed;
+}
+
+// Add the current AOReloaded tab (and the Renderer tab, when a renderer with
+// a settings interface is loaded) before </root>.
+static void InjectRootBlocks(std::string& xml) {
+    const size_t end = xml.rfind("</root>");
+    if (end == std::string::npos) return;
+    std::string blocks(AorXmlBlock());
+    if (const char* rendererBlock = RendererXmlBlock()) blocks += rendererBlock;
+    xml.insert(end, blocks);
+}
+
+// Overlay patcher: strip stale blocks and add the current ones. Returns false
+// (file served unchanged) when there is nothing to change, which is also the
+// fast path once the on-disk files have been repaired.
+static bool RootXmlPatcher(const std::string& in, std::string& out) {
+    std::string work = in;
+    StripRootBlocks(work);
+    InjectRootBlocks(work);
+    if (work == in) return false;
+    out.swap(work);
+    return true;
+}
+
+void RegisterRootXmlOverlay() {
+    overlay::RegisterPatcher("OptionPanel/Root.xml", &RootXmlPatcher);
+}
+
+// One-time repair: older builds wrote the blocks into the file. Strip them so
+// that deleting version.dll really restores the stock GUI.
+static void CleanRootXmlFile(const char* xmlPath) {
     HANDLE hFile = CreateFileA(xmlPath, GENERIC_READ, FILE_SHARE_READ,
                                nullptr, OPEN_EXISTING, 0, nullptr);
-    if (hFile == INVALID_HANDLE_VALUE) return;  // file doesn't exist, skip
+    if (hFile == INVALID_HANDLE_VALUE) return;
 
-    DWORD fileSize = GetFileSize(hFile, nullptr);
+    const DWORD fileSize = GetFileSize(hFile, nullptr);
     if (fileSize == INVALID_FILE_SIZE || fileSize > 1024 * 1024) {
         CloseHandle(hFile);
         return;
     }
 
-    const char* aorBlock = AorXmlBlock();
-    auto* buf = new(std::nothrow) char[fileSize + 1];
-    if (!buf) { CloseHandle(hFile); return; }
-
+    std::string xml;
+    xml.resize(fileSize);
     DWORD bytesRead = 0;
-    ReadFile(hFile, buf, fileSize, &bytesRead, nullptr);
+    const bool read = fileSize == 0 ||
+        (ReadFile(hFile, &xml[0], fileSize, &bytesRead, nullptr) && bytesRead == fileSize);
     CloseHandle(hFile);
-    buf[bytesRead] = '\0';
-
-    // If an old AOReloaded block exists, strip it out. We always re-inject
-    // the current version so that new settings appear automatically on
-    // update without users needing to reconfigure. User values are safe —
-    // they live in AOReloaded.ini, not in the XML.
-    char* oldStart = std::strstr(buf, "<ScrollView");
-    while (oldStart) {
-        // Check if THIS ScrollView is the AOReloaded one.
-        char* tagEnd = std::strchr(oldStart, '>');
-        const char* aorLabel = std::strstr(oldStart, "label=\"AOReloaded\"");
-        const char* rvkLabel = std::strstr(oldStart, "label=\"Renderer\"");
-        if (tagEnd && ((aorLabel && aorLabel < tagEnd + 1) || (rvkLabel && rvkLabel < tagEnd + 1))) {
-            // Found it. Find the matching </ScrollView>.
-            char* closeTag = std::strstr(oldStart, "</ScrollView>");
-            if (closeTag) {
-                closeTag += 13;  // skip past </ScrollView>
-                // Skip trailing whitespace/newline.
-                while (*closeTag == '\n' || *closeTag == '\r') ++closeTag;
-                // Remove by shifting the rest of the buffer over.
-                std::memmove(oldStart, closeTag, std::strlen(closeTag) + 1);
-                Log("[settings] removed old AOReloaded/Renderer block from: %s", xmlPath);
-                oldStart = std::strstr(buf, "<ScrollView");   // the other one may still be there
-                continue;
-            }
-            break;
-        }
-        oldStart = std::strstr(oldStart + 1, "<ScrollView");
-    }
-
-    char* endTag = std::strstr(buf, "</root>");
-    if (!endTag) {
-        Log("[settings] missing </root>: %s", xmlPath);
-        delete[] buf;
-        return;
-    }
-
-    size_t prefixLen = static_cast<size_t>(endTag - buf);
-    size_t blockLen = std::strlen(aorBlock);
-    // The renderer's tab, if a randy-vk renderer with a settings interface is loaded.
-    const char* rendererBlock = RendererXmlBlock();
-    size_t rendererLen = rendererBlock ? std::strlen(rendererBlock) : 0;
-    size_t suffixLen = std::strlen(endTag);
-
-    auto* newBuf = new(std::nothrow) char[prefixLen + blockLen + rendererLen + suffixLen + 1];
-    if (!newBuf) { delete[] buf; return; }
-
-    std::memcpy(newBuf, buf, prefixLen);
-    std::memcpy(newBuf + prefixLen, aorBlock, blockLen);
-    if (rendererLen)
-        std::memcpy(newBuf + prefixLen + blockLen, rendererBlock, rendererLen);
-    std::memcpy(newBuf + prefixLen + blockLen + rendererLen, endTag, suffixLen);
-    size_t totalLen = prefixLen + blockLen + rendererLen + suffixLen;
-    newBuf[totalLen] = '\0';
-    delete[] buf;
+    if (!read || !StripRootBlocks(xml)) return;
 
     hFile = CreateFileA(xmlPath, GENERIC_WRITE, 0,
                         nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hFile == INVALID_HANDLE_VALUE) {
-        Log("[settings] cannot write: %s (%lu)", xmlPath, GetLastError());
-        delete[] newBuf;
+        Log("[settings] cannot restore %s (%lu)", xmlPath, GetLastError());
         return;
     }
-
     DWORD written = 0;
-    WriteFile(hFile, newBuf, static_cast<DWORD>(totalLen), &written, nullptr);
+    WriteFile(hFile, xml.data(), static_cast<DWORD>(xml.size()), &written, nullptr);
     CloseHandle(hFile);
-    delete[] newBuf;
+    Log("[settings] restored stock Root.xml: %s", xmlPath);
+}
 
-    Log("[settings] injected AOReloaded tab: %s", xmlPath);
+void CleanRootXmlOnDisk() {
+    ForEachGuiFile("OptionPanel\\Root.xml", CleanRootXmlFile);
 }
 
 // ── Public API ─────────────────────────────────────────────────────────
@@ -672,10 +679,6 @@ void ForEachGuiFile(const char* relPath, void (*fn)(const char* path)) {
         FindClose(hHash);
     }
 done_appdata:;
-}
-
-void PatchOptionsXml() {
-    ForEachGuiFile("OptionPanel\\Root.xml", PatchSingleRootXml);
 }
 
 void SettingsInit() {

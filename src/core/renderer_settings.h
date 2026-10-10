@@ -11,7 +11,7 @@
 
 namespace aor {
 
-// Resolve the interface and register the DValues. Call with the other settings (before PatchOptionsXml).
+// Resolve the interface and register the DValues. Call with the other settings (before RegisterRootXmlOverlay).
 void RendererSettingsRegisterAll();
 
 // The Renderer tab's XML (a ScrollView), or nullptr without a renderer interface.

@@ -8,6 +8,8 @@ Client mod for Anarchy Online. Drop `version.dll` into your client directory and
 2. Launch the game normally
 3. Check `AOReloaded.log` in the client folder to confirm it loaded
 
+To uninstall, delete `version.dll`. The options tab and the skills window's Favorites group are injected in memory, not written into the game files, so removing the DLL leaves the stock GUI. (Older builds did edit `OptionPanel/Root.xml` and `Views/Skills.xml` on disk; the first launch of this build strips those edits back out. If you already deleted `version.dll`, see [Removing a leftover custom GUI](README.md#removing-a-leftover-custom-gui-older-versions) for manual steps.)
+
 ## Features
 
 ### WoW-style Camera Auto-Follow

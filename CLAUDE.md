@@ -61,12 +61,18 @@ Game's CVar equivalent. Named string keys → Variant values in global thread-sa
 
 ## Options Panel Integration
 
-The game's options panel is pure data-driven XML at `client/cd_image/gui/Default/OptionPanel/Root.xml`. An **AOReloaded tab** has been added with test widgets bound to custom DValues. To add new options:
+The game's options panel is pure data-driven XML at `client/cd_image/gui/Default/OptionPanel/Root.xml`. An **AOReloaded tab** and (with a randy-vk settings interface) a **Renderer tab** are added by the in-memory overlay. To add new options:
 
 1. Register DValue in `dllmain.cpp` via `GameAPI::RegisterBool/Int/Float`
-2. Add widget XML to the AOReloaded `<ScrollView>` in `Root.xml`
+2. Add widget XML to the AOReloaded `<ScrollView>` (`kAorXmlHead`/`kAorXmlTail` in `src/core/settings.cpp`)
 3. Widget types: `OptionCheckBox`, `OptionSlider`, `OptionRadioButtonGroup`
 4. Bind via `opt_variable="YourDValueName"` and `opt_type="variant"`
+
+### GUI XML overlay (`src/core/gui_overlay.cpp`)
+
+The tabs and the skills window's Favorites group must be present in the GUI XML the client parses. Writing them to disk left them behind when users uninstalled by deleting `version.dll`, so they are now injected in memory: `Init()` hooks every loaded module's `CreateFileW`/`CreateFileA` through its IAT (`src/core/win_iat.cpp`), and when the client opens a registered path (`OptionPanel/Root.xml`, `Views/Skills.xml`) the patcher (`RootXmlPatcher`, `SkillsXmlPatcher`) rewrites the bytes and the caller gets a transient `FILE_FLAG_DELETE_ON_CLOSE` copy. The install is never modified. `CleanRootXmlOnDisk`/`CleanSkillsXmlOnDisk` strip blocks older builds wrote, once, at startup. To overlay another file, `overlay::RegisterPatcher("Some/File.xml", fn)` before `overlay::Init()`.
+
+**Only modules loaded outside the Windows directory are patched** (`IsSystemModule` in `win_iat.cpp`), and the "real" pointers are resolved from `kernelbase.dll` when present. This is load-bearing: `kernel32.dll` imports `CreateFileW` from `kernelbase.dll` and re-exports it as a thunk through that import slot, so patching kernel32 (or resolving the original from it) makes the detour call itself recursively — an instant stack overflow and a hung client.
 
 ## Confirmed Working (2026-04-14)
 
