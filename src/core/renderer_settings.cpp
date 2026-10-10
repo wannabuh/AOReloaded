@@ -118,6 +118,19 @@ void Append(char*& out, char* end, const char* text)
 
 bool Is(const char* a, const char* b) { return a && b && std::strcmp(a, b) == 0; }
 
+// A setting in the "Experimental" section: shown in its own block under the switches, off by default (the
+// defaults and the section are set in randy-vk's settings table).
+bool IsExperimental(const RvkSettingInfo& s) { return Is(s.section, "Experimental"); }
+
+// The settings whose `parent` is `p`, of the requested kind (bool switches or values).
+std::vector<const RvkSettingInfo*> ChildrenOf(const std::vector<RvkSettingInfo>& all, const RvkSettingInfo& p, bool bools)
+{
+    std::vector<const RvkSettingInfo*> list;
+    for (const RvkSettingInfo& c : all)
+        if (Is(c.parent, p.name) && (c.type == kBool) == bools) list.push_back(&c);
+    return list;
+}
+
 void AppendCheckBox(char*& out, char* end, const RvkSettingInfo& s, int indent)
 {
     char attrs[128];
@@ -176,6 +189,35 @@ void AppendHeading(char*& out, char* end, const char* text, int top)
     Append(out, end, "\n        <TextView value=\"");
     AppendEscaped(out, end, text);
     Append(out, end, attrs);
+}
+
+// The experimental features (settings in section "Experimental"): their own block under the switches, off by
+// default. The switches come first - so they sit right under the other enhancements - then their values, grouped
+// under each feature.
+void AppendExperimental(char*& out, char* end, const std::vector<RvkSettingInfo>& all)
+{
+    bool any = false;
+    for (const RvkSettingInfo& s : all)
+        if (!s.parent && IsExperimental(s)) { any = true; break; }
+    if (!any) return;
+
+    AppendHeading(out, end, "Experimental", 6);
+    Append(out, end, "        <TextView value=\"New and unfinished features. Off by default; they may be unstable or"
+                     " change.\" layout_borders=\"Rect(10,0,0,3)\" />\n");
+    // The switches, one block per feature (its own sub-switches indented).
+    for (const RvkSettingInfo& p : all) {
+        if (p.parent || !IsExperimental(p)) continue;
+        AppendCheckBox(out, end, p, 10);
+        for (const RvkSettingInfo* c : ChildrenOf(all, p, true)) AppendCheckBox(out, end, *c, 30);
+    }
+    // Then each feature's values, under its label.
+    for (const RvkSettingInfo& p : all) {
+        if (p.parent || !IsExperimental(p)) continue;
+        std::vector<const RvkSettingInfo*> values = ChildrenOf(all, p, false);
+        if (values.empty()) continue;
+        AppendHeading(out, end, p.label, 8);
+        for (const RvkSettingInfo* v : values) AppendValue(out, end, *v);
+    }
 }
 
 // The frame rate cap (AOReloaded's own AOR_FpsCap, fps_cap.cpp) first: it belongs with the renderer's settings,
@@ -259,32 +301,28 @@ void BuildXml()
         RvkSettingInfo s;
         if (GetInfo(i, s)) all.push_back(s);
     }
-    auto childrenOf = [&](const RvkSettingInfo& p, bool bools) {
-        std::vector<const RvkSettingInfo*> list;
-        for (const RvkSettingInfo& c : all)
-            if (Is(c.parent, p.name) && (c.type == kBool) == bools) list.push_back(&c);
-        return list;
-    };
-
-    // Options: the switches.
+    // Options: the switches (experimental features are pulled out into their own block just below).
     AppendHeading(out, end, "Options", 16);
     const char* section = "";
     for (const RvkSettingInfo& s : all) {
-        if (s.type != kBool || s.parent) continue;
+        if (s.type != kBool || s.parent || IsExperimental(s)) continue;
         if (!Is(section, s.section)) {
             section = s.section;
             AppendHeading(out, end, section, 6);
         }
         AppendCheckBox(out, end, s, 10);
-        for (const RvkSettingInfo* c : childrenOf(s, true)) AppendCheckBox(out, end, *c, 30);
+        for (const RvkSettingInfo* c : ChildrenOf(all, s, true)) AppendCheckBox(out, end, *c, 30);
     }
+    // The experimental features, right under the switches: new and unfinished, off by default.
+    AppendExperimental(out, end, all);
 
     // Values: a block per feature (its label) or, for values of no feature, one per section.
     AppendHeading(out, end, "Adjustments", 16);
     const char* heading = "";
     for (const RvkSettingInfo& s : all) {
+        if (!s.parent && IsExperimental(s)) continue;
         if (s.type == kBool && !s.parent) {
-            std::vector<const RvkSettingInfo*> values = childrenOf(s, false);
+            std::vector<const RvkSettingInfo*> values = ChildrenOf(all, s, false);
             if (values.empty()) continue;
             AppendHeading(out, end, s.label, 8);
             heading = s.label;

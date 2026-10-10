@@ -68,6 +68,10 @@ The game's options panel is pure data-driven XML at `client/cd_image/gui/Default
 3. Widget types: `OptionCheckBox`, `OptionSlider`, `OptionRadioButtonGroup`
 4. Bind via `opt_variable="YourDValueName"` and `opt_type="variant"`
 
+Renderer tab: settings the renderer puts in the `Experimental` section are rendered by `renderer_settings.cpp` in a
+dedicated block just under the on/off switches and are off by default (the default values live in randy-vk's
+settings table).
+
 ### GUI XML overlay (`src/core/gui_overlay.cpp`)
 
 The tabs and the skills window's Favorites group must be present in the GUI XML the client parses. Writing them to disk left them behind when users uninstalled by deleting `version.dll`, so they are now injected in memory: `Init()` hooks every loaded module's `CreateFileW`/`CreateFileA` through its IAT (`src/core/win_iat.cpp`), and when the client opens a registered path (`OptionPanel/Root.xml`, `Views/Skills.xml`) the patcher (`RootXmlPatcher`, `SkillsXmlPatcher`) rewrites the bytes and the caller gets a transient `FILE_FLAG_DELETE_ON_CLOSE` copy. The install is never modified. `CleanRootXmlOnDisk`/`CleanSkillsXmlOnDisk` strip blocks older builds wrote, once, at startup. To overlay another file, `overlay::RegisterPatcher("Some/File.xml", fn)` before `overlay::Init()`.

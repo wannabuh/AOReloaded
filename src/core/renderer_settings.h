@@ -5,7 +5,9 @@
 // If the loaded randy31.dll exports the randy-vk settings interface (RvkSettings_*), its settings get a
 // "Renderer" tab: each becomes a DValue (bool, or int - float settings are scaled by their step) bound to an
 // option widget, and changes made there are passed to the renderer, which applies and saves them itself
-// (randy-vk.ini). Without such a renderer nothing happens and no tab is added.
+// (randy-vk.ini). Settings the renderer puts in the "Experimental" section are shown in a block of their own right
+// under the on/off switches; being new and unfinished, they are off by default. Without such a renderer nothing
+// happens and no tab is added.
 
 #include "ao/types.h"
 
